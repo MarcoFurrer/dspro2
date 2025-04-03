@@ -24,12 +24,13 @@ np.random.seed(SEED)
 tf.random.set_seed(SEED)
 
 class EfficientCategoricalModel:
-    def __init__(self, data_path, output_path='models/exports', batch_size=64):
+    def __init__(self, data_path, output_path='models/exports', batch_size=64, model = None):
         self.data_path = data_path
         self.output_path = output_path
         self.batch_size = batch_size
         self.feature_count = None
         self.n_categories = 5  # Categories 0-4
+        self.external_model = model  # Store the external model if provided
         os.makedirs(output_path, exist_ok=True)
         self.target_mapping = {0.0: 0, 0.25: 1, 0.5: 2, 0.75: 3, 1.0: 4}  # Map float targets to integers
         self.inverse_target_mapping = {0: 0.0, 1: 0.25, 2: 0.5, 3: 0.75, 4: 1.0}  # For converting back
@@ -116,7 +117,7 @@ class EfficientCategoricalModel:
             
         return dataset
     
-    def _create_model(self):
+    def _create_default_model(self):
         """Create a simple but efficient model for categorical data"""
         model = Sequential([
             # Input layer
@@ -166,9 +167,13 @@ class EfficientCategoricalModel:
         val_dataset = full_dataset.take(validation_steps)
         train_dataset = full_dataset.skip(validation_steps)
         
-        # Create model
-        print("Creating model...")
-        model = self._create_model()
+        if self.external_model is not None:
+            print("Using provided external model...")
+            model = self.external_model
+        else:
+            print("No model provided, creating default model...")
+            model = self._create_default_model()
+
         model.summary()
         
         # Callbacks for training
