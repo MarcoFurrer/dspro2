@@ -4,6 +4,7 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "-1"  # hides GPU from TensorFlow
 os.environ["TF_XLA_FLAGS"] = "--tf_xla_enable_xla_devices=false"  # disables broken XLA
 
 import json
+from datetime import datetime
 import matplotlib.pyplot as plt
 import pyarrow.parquet as pq
 
@@ -35,7 +36,17 @@ optimizer = SGD(learning_rate=0.01)
 
 
 class EfficientCategoricalModel:
-    def __init__(self, data_path_train = None, data_path_val = None, data_path_metadata = None,data_path_meta_model = None, output_path='exports', batch_size=64, subset_features = "small", model = None):
+    def __init__(self, 
+                 data_path_train = None, 
+                 data_path_val = None, 
+                 data_path_metadata = None,
+                 data_path_meta_model = None, 
+                 output_path='exports', 
+                 batch_size=64, 
+                 subset_features = "small",
+                 model = None,
+                 optimizer = None):
+        
         self.data_path_train = data_path_train
         self.data_path_val = data_path_val
         self.data_path_metadata = data_path_metadata
@@ -52,6 +63,8 @@ class EfficientCategoricalModel:
         self.target_mapping = {0.0: 0, 0.25: 1, 0.5: 2, 0.75: 3, 1.0: 4}  # Map float targets to integers
         self.inverse_target_mapping = {0: 0.0, 1: 0.25, 2: 0.5, 3: 0.75, 4: 1.0}  # For converting back
         self._validation = None
+        self.data_version = "v5.0"
+        self.optimizer = optimizer
 
         
 
@@ -64,18 +77,18 @@ class EfficientCategoricalModel:
 
         # Maybe add this as parameter later to change versions
         # Set data version to one of the latest datasets
-        DATA_VERSION = "v5.0"
+        
         
         # Print all files available for download for our version
-        current_version_files = [f for f in all_datasets if f.startswith(DATA_VERSION)]
-        print("Available", DATA_VERSION, "files:\n", current_version_files)
+        current_version_files = [f for f in all_datasets if f.startswith(self.data_version)]
+        print("Available", self.data_version, "files:\n", current_version_files)
 
         # download the feature metadata file
-        napi.download_dataset(f"{DATA_VERSION}/features.json")
-        napi.download_dataset(f"{DATA_VERSION}/validation.parquet")
+        napi.download_dataset(f"{self.data_version}/features.json")
+        napi.download_dataset(f"{self.data_version}/validation.parquet")
 
-        self.data_path_train = f"{DATA_VERSION}/features.json"
-        self.data_path_val = f"{DATA_VERSION}/validation.parquet"
+        self.data_path_train = f"{self.data_version}/features.json"
+        self.data_path_val = f"{self.data_version}/validation.parquet"
 
 
     def _get_dataset_info(self):
@@ -116,9 +129,9 @@ class EfficientCategoricalModel:
 
 
  #is not used
-    def _load_data():
+    def _load_data(self):
         # read the metadata and display
-        feature_metadata = json.load(open(f"{DATA_VERSION}/features.json"))
+        feature_metadata = json.load(open(f"{self.data_version}/features.json"))
         for metadata in feature_metadata:
           print(metadata, len(feature_metadata[metadata]))
 
@@ -130,12 +143,12 @@ class EfficientCategoricalModel:
         self._feature_set = feature_set
 
         # Download the training data - this will take a few minutes
-        napi.download_dataset(f"{DATA_VERSION}/train.parquet")
+        napi.download_dataset(f"{self.data_version}/train.parquet")
         
         # Load only the "medium" feature set to
         # Use the "all" feature set to use all features
         self._train = pd.read_parquet(
-            f"{DATA_VERSION}/train.parquet",
+            f"{self.data_version}/train.parquet",
             columns=["era", "target"] + feature_set
         )
         self._target_set = self._train["target"]
@@ -144,7 +157,7 @@ class EfficientCategoricalModel:
 
     def plot_data(self):
         # Plot the number of rows per era
-        slef._train.groupby("era").size().plot(
+        self._train.groupby("era").size().plot(
         title="Number of rows per era",
         figsize=(5, 3),
         xlabel="Era"
@@ -213,7 +226,7 @@ class EfficientCategoricalModel:
 
     def export_model(self):
         """Simple model export"""
-        model_path = os.path.join(self.output_path, 'model.keras')
+        model_path = os.path.join(self.output_path, f'model{datetime.now().strftime("%Y%m%d_%H%M%S")}.keras')
         self.model.save(model_path)
         print(f"Model saved to: {model_path}")
 
@@ -313,11 +326,13 @@ class EfficientCategoricalModel:
         if self.external_model is not None:
             print("Using provided external model...")
             model = self.external_model
+            print(f"Model summary:\n{model.summary()}")
+            model.compile(optimizer=self.optimizer, loss='mae', metrics=['mae'])
+                
         else:
             print("No model provided, creating default model...")
             model = self._create_default_model()
 
-        model.summary()
         
         # Callbacks for training
         callbacks = [
@@ -362,11 +377,13 @@ class EfficientCategoricalModel:
         return float_predictions
     
 
-    def validate_model(self):
+    def validate_model(self, model_filepath=None):
+        
         # Load the validation data and filter for data_type == "validation
 
         # Load the validation data and filter for data_type == "validation"
-
+        if model_filepath != None:
+            self.model = tf.keras.models.load_model(model_filepath)
 
         validation = pd.read_parquet(
             self.data_path_val,

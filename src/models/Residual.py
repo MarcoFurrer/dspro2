@@ -3,7 +3,7 @@ from keras.models import Model
 from keras.layers import Dense, BatchNormalization, Dropout, Input, Add
 
 # Input layer
-inputs = Input(shape=(30,), dtype=tf.uint8)
+inputs = Input(shape=(42,), dtype=tf.uint8)
 x = tf.keras.layers.Lambda(lambda x: tf.cast(x, tf.float32))(inputs)
 
 # First block
