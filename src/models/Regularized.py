@@ -5,7 +5,7 @@ from keras.regularizers import l1_l2
 
 model = Sequential([
     # Input layer
-    Input(shape=(30,), dtype=tf.uint8),
+    Input(shape=(42,), dtype=tf.uint8),
     
     # Convert to float32 for stability
     tf.keras.layers.Lambda(lambda x: tf.cast(x, tf.float32)),
