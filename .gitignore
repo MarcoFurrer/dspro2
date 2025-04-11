@@ -1,3 +1,7 @@
 data/*
 !data/download.py
 .venv/
+.ipynb_checkpoints/
+.env
+*.h5
+*.keras
