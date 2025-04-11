@@ -13,26 +13,17 @@ import pandas as pd
 import numpy as np
 import gc
 from keras.models import Sequential
-from keras.layers import Dense, Dropout, BatchNormalization, Input
+from keras.layers import Dense, Dropout, Input
 from keras.callbacks import EarlyStopping, ReduceLROnPlateau
 from keras.optimizers import Adam
 
 from numerapi import NumerAPI
 from numerai_tools.scoring import numerai_corr, correlation_contribution
 
-
 napi = NumerAPI()
-
-#tf.config.optimizer.set_jit(False)
-
-from tensorflow.python.client import device_lib
-#print(device_lib.list_local_devices())
 
 from keras.optimizers import SGD
 optimizer = SGD(learning_rate=0.01)
-
-
-
 
 
 class EfficientCategoricalModel:
@@ -66,19 +57,11 @@ class EfficientCategoricalModel:
         self.data_version = "v5.0"
         self.optimizer = optimizer
 
-        
-
-
     def _download_data(self):
         # list the datasets and available versions
         all_datasets = napi.list_datasets()
         dataset_versions = list(set(d.split('/')[0] for d in all_datasets))
         print("Available versions:\n", dataset_versions)
-
-        # Maybe add this as parameter later to change versions
-        # Set data version to one of the latest datasets
-        
-        
         # Print all files available for download for our version
         current_version_files = [f for f in all_datasets if f.startswith(self.data_version)]
         print("Available", self.data_version, "files:\n", current_version_files)
@@ -89,7 +72,6 @@ class EfficientCategoricalModel:
 
         self.data_path_train = f"{self.data_version}/features.json"
         self.data_path_val = f"{self.data_version}/validation.parquet"
-
 
     def _get_dataset_info(self):
         """Get basic information about the dataset"""
@@ -153,8 +135,6 @@ class EfficientCategoricalModel:
         )
         self._target_set = self._train["target"]
 
-        
-
     def plot_data(self):
         # Plot the number of rows per era
         self._train.groupby("era").size().plot(
@@ -191,52 +171,14 @@ class EfficientCategoricalModel:
            ax=ax2
         )
 
-
-    def _create_default_model(self):
-        """Create a simple but efficient model for categorical data"""
-        model = Sequential([
-            # Input layer
-            Input(shape=(self.feature_count,), dtype=tf.float32),
-                
-            # Hidden layers
-            Dense(128, activation='relu'),
-            #BatchNormalization(),
-            Dropout(0.3),
-            
-            Dense(64, activation='relu'),
-            #BatchNormalization(),
-            Dropout(0.2),
-            
-            # Output layer - 5 classes for our target values
-            # Output layer -1 for continous value between 0 and 1
-            Dense(1, activation='sigmoid')
-        ])
-        
-        # Use sparse categorical crossentropy since targets are integers
-        #optimizer = Adam(learning_rate=0.001)
-        model.compile(
-            optimizer=optimizer,
-            loss='mae',
-            metrics=['mae']
-        )
-        
-        return model
-                
-                        
-
     def export_model(self):
         """Simple model export"""
         model_path = os.path.join(self.output_path, f'model{datetime.now().strftime("%Y%m%d_%H%M%S")}.keras')
         self.model.save(model_path)
         print(f"Model saved to: {model_path}")
 
-
-
-    
-
     def _create_dataset_pipeline(self, data_path, is_training=True):
         """Create an efficient TF dataset pipeline that processes data in batches"""
-        
         # Define dataset batch generator
         def generator():
             parquet_file = pq.ParquetFile(data_path)
@@ -296,22 +238,17 @@ class EfficientCategoricalModel:
             
         return dataset  
 
-
     def train(self, validation_split = 0.1 , epochs = 5):
         """Train the model using memory-efficient batch processing"""
-        
         if self.data_path_train == None:
             self._download_data()
     
-        #self._load_data()
         self._get_dataset_info()
         
         # Create full dataset pipeline
         print("Creating dataset pipeline...")
         full_dataset = self._create_dataset_pipeline(self.data_path_train)
-        
-        # Calculate steps for validation data
-       
+    
         train_size = int(self.total_rows * (1 - validation_split))
         
         steps_per_epoch = train_size // self.batch_size
@@ -323,17 +260,10 @@ class EfficientCategoricalModel:
         
         train_dataset = full_dataset.skip(validation_steps)
         
-        if self.external_model is not None:
-            print("Using provided external model...")
-            model = self.external_model
-            print(f"Model summary:\n{model.summary()}")
-            model.compile(optimizer=self.optimizer, loss='mae', metrics=['mae'])
-                
-        else:
-            print("No model provided, creating default model...")
-            model = self._create_default_model()
-
-        
+        print("Using provided external model...")
+        model = self.external_model
+        print(f"Model summary:\n{model.summary()}")
+        model.compile(optimizer=self.optimizer, loss='mae', metrics=['mae'])
         # Callbacks for training
         callbacks = [
             EarlyStopping(monitor='val_loss', patience=3, restore_best_weights=True, verbose=1),
@@ -354,10 +284,7 @@ class EfficientCategoricalModel:
         
         # Store model as instance variable
         self.model = model
-        
-        # Simple export
         self.export_model()
-        
         return model, history
 
     def predict(self, X):
@@ -378,9 +305,6 @@ class EfficientCategoricalModel:
     
 
     def validate_model(self, model_filepath=None):
-        
-        # Load the validation data and filter for data_type == "validation
-
         # Load the validation data and filter for data_type == "validation"
         if model_filepath != None:
             self.model = tf.keras.models.load_model(model_filepath)
@@ -396,8 +320,7 @@ class EfficientCategoricalModel:
             self.data_path_train,
             columns=["era", "target"] + self._feature_set
         )
-        
-        
+         
         # Downsample to every 4th era to reduce memory usage and speedup evaluation (suggested for Colab free tier)
         # Comment out the line below to use all the data (slower and higher memory usage, but more accurate evaluation)
         validation = validation[validation["era"].isin(validation["era"].unique()[::4])]
@@ -411,13 +334,10 @@ class EfficientCategoricalModel:
         # Generate predictions against the out-of-sample validation features
         # This will take a few minutes 🍵
         validation["prediction"] = self.model.predict(validation[self._feature_set]).squeeze()
-
         self._validation = validation
-
         return validation
 
     def performance_eval(self):
-
         if self._validation is None:
             print("Please run validation before evaluating the performance!")
             return None
@@ -437,7 +357,6 @@ class EfficientCategoricalModel:
         per_era_mmc = validation.dropna().groupby("era").apply(
             lambda x: correlation_contribution(x[["prediction"]], x["meta_model"], x["target"])
         )
-        
         
         # Plot the per-era correlation
         per_era_corr.plot(
