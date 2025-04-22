@@ -23,7 +23,7 @@ class ModelManager:
         # Create exports directory if it doesn't exist
         os.makedirs(output_path, exist_ok=True)
     
-    def train(self, train_dataset, val_dataset, steps_per_epoch, validation_steps, epochs=5):
+    def train(self, train_dataset, val_dataset, steps_per_epoch, validation_steps, epochs=5, callbacks=None):
         """Train the model using memory-efficient batch processing"""
         if self.model is None:
             raise ValueError("No model provided for training")
@@ -32,10 +32,16 @@ class ModelManager:
         self.model.compile(optimizer=self.optimizer, loss='mae', metrics=['mae'])
         
         # Callbacks for training
-        callbacks = [
+        default_callbacks = [
             EarlyStopping(monitor='val_loss', patience=3, restore_best_weights=True, verbose=1),
             ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=2, min_lr=0.0001, verbose=1),
         ]
+        
+        # Combine default callbacks with any provided callbacks
+        if callbacks:
+            all_callbacks = default_callbacks + callbacks
+        else:
+            all_callbacks = default_callbacks
         
         # Train with reduced steps to avoid memory issues
         print(f"Training model for {epochs} epochs...")
@@ -45,7 +51,7 @@ class ModelManager:
             steps_per_epoch=min(steps_per_epoch, 200),  
             validation_data=val_dataset,
             validation_steps=min(validation_steps, 50),
-            callbacks=callbacks,
+            callbacks=all_callbacks,
             verbose=1
         )
         

@@ -45,7 +45,7 @@ class EfficientCategoricalModel:
         
         self.visualizer = Visualizer()
     
-    def train(self, validation_split=0.1, epochs=5):
+    def train(self, validation_split=0.1, epochs=5, callbacks=None):
         """Train the model using memory-efficient batch processing"""
         # Download data if needed and get dataset info
         if self.data_handler.data_path_train is None or self.data_handler.data_path_metadata is None:
@@ -76,7 +76,8 @@ class EfficientCategoricalModel:
             val_dataset=val_dataset,
             steps_per_epoch=steps_per_epoch,
             validation_steps=validation_steps,
-            epochs=epochs
+            epochs=epochs,
+            callbacks=callbacks
         )
         
         # Visualize training history
