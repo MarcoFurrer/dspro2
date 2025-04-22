@@ -187,6 +187,88 @@ def train_model_with_reduced_memory(model, X_train, y_train, X_val, y_val, callb
     
     return history
 
+def train_model_with_ordinal_focus(model, X_train, y_train, X_val, y_val, callbacks, batch_size, epochs):
+    """Train model with techniques optimized for ordinal prediction"""
+    # Calculate steps per epoch
+    steps_per_epoch = len(X_train) // batch_size
+    validation_steps = len(X_val) // batch_size
+    
+    # Create a custom batch generator that emphasizes learning the ordering relationship
+    def ordinal_aware_generator(X, y, batch_size):
+        indices = np.arange(len(X))
+        
+        # Calculate class frequencies for balanced sampling
+        class_indices = [np.where(np.isclose(y, i/4.0))[0] for i in range(5)]
+        class_sizes = [len(indices) for indices in class_indices]
+        min_samples = max(50, min(class_sizes))  # Ensure minimum samples per class
+        
+        while True:
+            # Create a balanced batch with equal representation from each class
+            batch_indices = []
+            for i in range(5):
+                # Sample with replacement if needed to ensure enough samples
+                if len(class_indices[i]) < min_samples:
+                    sampled = np.random.choice(class_indices[i], min_samples, replace=True)
+                else:
+                    sampled = np.random.choice(class_indices[i], min_samples, replace=False)
+                batch_indices.extend(sampled)
+            
+            # Shuffle the balanced indices
+            np.random.shuffle(batch_indices)
+            
+            # Yield batches from the balanced set
+            for i in range(0, len(batch_indices), batch_size):
+                current_indices = batch_indices[i:min(i+batch_size, len(batch_indices))]
+                yield X[current_indices].astype(np.float32), y[current_indices]
+    
+    # Create data generators
+    train_gen = ordinal_aware_generator(X_train, y_train, batch_size)
+    val_gen = ordinal_aware_generator(X_val, y_val, batch_size)
+    
+    # Calculate steps with balanced sampling
+    balanced_steps = (5 * min_samples) // batch_size
+    
+    # Train using generators with ordinal focus
+    history = model.fit(
+        train_gen,
+        steps_per_epoch=balanced_steps,
+        validation_data=val_gen,
+        validation_steps=validation_steps,
+        epochs=epochs,
+        callbacks=callbacks,
+        verbose=1,
+        use_multiprocessing=False,
+        workers=1
+    )
+    
+    return history
+
+def augment_data(X, y, noise_scale=0.01, augmentation_factor=0.05):
+    """
+    Improved data augmentation function that is more sensitive to feature types.
+    - Adds smaller noise to features
+    - Uses a more appropriate augmentation strategy for ordinal regression
+    """
+    # Create copies for augmentation
+    X_aug = X.copy()
+    y_aug = y.copy()
+    
+    # Selectively add noise based on feature importance
+    # Identify features that have higher correlation with targets
+    # This is a simplified approach - ideally we'd use feature importance from a trained model
+    feature_mask = np.random.random(X.shape[1]) < 0.5  # Only modify 50% of features
+    
+    # Add selective noise to features - smaller values for more stability
+    noise = np.random.normal(0, noise_scale, X_aug.shape) * feature_mask
+    X_aug = X_aug + noise
+    
+    # For ordinal regression - small perturbation to target values
+    # This smooths the ordinal boundaries a bit and helps generalization
+    target_noise = np.random.normal(0, 0.02, y_aug.shape)  # Very small noise for targets
+    y_aug = np.clip(y_aug + target_noise, 0, 1)  # Ensure targets stay in [0,1]
+    
+    return X_aug, y_aug
+
 def main():
     try:
         print("Initializing memory-optimized ordinal model training with enhanced feature learning...")
@@ -339,21 +421,19 @@ def main():
         if os.path.exists(best_model_path):
             print(f"\nLoading best model from {best_model_path}")
             try:
-                # Try loading with safe_mode=False
+                # Try loading with correct custom objects
                 best_model = tf.keras.models.load_model(
                     best_model_path,
                     custom_objects={
                         'ordinal_loss': ordinal_loss,
                         'ordinal_mae': ordinal_mae,
                         'OrdinalLayer': OrdinalLayer,
-                        'EnhancedFeatureInteractionLayer': EnhancedFeatureInteractionLayer,
-                        'CrossNetworkLayer': CrossNetworkLayer,
-                        'MultiHeadFeatureAttention': MultiHeadFeatureAttention,
-                        'LookaheadOptimizer': LookaheadOptimizer
+                        'FeatureInteractionLayer': FeatureInteractionLayer,
+                        'SelfAttentionLayer': SelfAttentionLayer
                     },
                     safe_mode=False  # Allow Lambda layer loading
                 )
-                print("Successfully loaded best model with enhanced feature interactions")
+                print("Successfully loaded best model")
             except Exception as e:
                 print(f"Could not load saved model: {str(e)}")
                 print("Using current model for predictions")
