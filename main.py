@@ -4,7 +4,7 @@ from src.models.ImprovedModel import model as improved_model
 from src.models.CorrelationModel import model as correlation_model
 from src.optimizers.Adam import optimizer as adam_optimizer
 from src.optimizers.ImprovedAdam import optimizer as improved_optimizer
-from tensorflow.keras.callbacks import TensorBoard, EarlyStopping, ReduceLROnPlateau, ModelCheckpoint
+from keras.callbacks import TensorBoard, EarlyStopping, ReduceLROnPlateau, ModelCheckpoint
 import datetime
 import os
 import argparse
