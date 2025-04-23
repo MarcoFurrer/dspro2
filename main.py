@@ -1,6 +1,7 @@
 from src.EfficientCategoricalModel import EfficientCategoricalModel
 from src.models.Deep import model as deep_model
 from src.models.ImprovedModel import model as improved_model
+from src.models.CorrelationModel import model as correlation_model
 from src.optimizers.Adam import optimizer as adam_optimizer
 from src.optimizers.ImprovedAdam import optimizer as improved_optimizer
 from tensorflow.keras.callbacks import TensorBoard, EarlyStopping, ReduceLROnPlateau, ModelCheckpoint
@@ -246,13 +247,94 @@ def train_advanced(args):
     
     return fold_models, fold_results, best_model_path
 
+def train_correlation(args):
+    """Train using a model specifically designed to learn feature correlations rather than distribution"""
+    print("\n" + "="*50)
+    print("Starting correlation-focused model training")
+    print("="*50)
+    
+    # Create callbacks with advanced settings
+    model_name = "CorrelationModel"
+    callbacks, log_dir = create_callbacks(model_name=model_name, use_advanced=True)
+    
+    # Initialize model with the correlation model
+    print("Initializing correlation model...")
+    efficient_model = EfficientCategoricalModel(
+        data_path_train=args.train_data,
+        data_path_val=args.val_data,
+        data_path_metadata=args.meta_data,
+        data_path_meta_model=args.meta_model,
+        batch_size=args.batch_size,
+        model=correlation_model,
+        optimizer=improved_optimizer,  # Using improved optimizer for better convergence
+        subset_features="medium"  # Changed from "large" to "medium" to match available feature sets
+    )
+    
+    # Train the model
+    model, history = efficient_model.train(
+        epochs=args.epochs,
+        callbacks=callbacks
+    )
+    
+    # Save the trained model
+    model_path = f"exports/{model_name}_best.keras"
+    model.save(model_path)
+    print(f"Correlation model saved to: {model_path}")
+    
+    # Validate model if requested
+    if args.validate:
+        print("\nValidating correlation model...")
+        efficient_model.validate_model()
+        performance_metrics = efficient_model.performance_eval()
+        print("\nPerformance Metrics:")
+        for metric, value in performance_metrics.items():
+            print(f"{metric}: {value}")
+    
+    # Analyze feature importance and correlations
+    print("\nAnalyzing feature correlations...")
+    
+    # Get feature importances from the model
+    try:
+        # Prepare validation data
+        val_data = efficient_model.data_handler.load_val_data()
+        X_val = val_data[efficient_model.data_handler.feature_set].values
+        y_val = val_data['target'].values
+        
+        # Make predictions
+        y_pred = model.predict(X_val)
+        
+        # Compute feature correlations with target
+        import pandas as pd
+        feature_df = pd.DataFrame(X_val, columns=efficient_model.data_handler.feature_set)
+        feature_df['target'] = y_val
+        feature_df['prediction'] = y_pred.flatten()
+        
+        # Get top correlations with target
+        target_corrs = feature_df.corr()['target'].sort_values(ascending=False)
+        print("\nTop 10 features correlated with target:")
+        print(target_corrs.head(11))  # +1 because target itself will be first
+        
+        # Get top correlations with prediction
+        pred_corrs = feature_df.corr()['prediction'].sort_values(ascending=False)
+        print("\nTop 10 features correlated with prediction:")
+        print(pred_corrs.head(11))  # +1 because prediction itself will be first
+    except Exception as e:
+        print(f"Error analyzing correlations: {str(e)}")
+    
+    print("\nCorrelation model training complete!")
+    print(f"TensorBoard logs saved to: {log_dir}")
+    print("Run the following command to start TensorBoard:")
+    print(f"tensorboard --logdir={log_dir}")
+    
+    return model, history, efficient_model
+
 def main():
     """Main function to handle different training modes"""
     # Parse command line arguments
     parser = argparse.ArgumentParser(description='Train Efficient Categorical Model')
     parser.add_argument('--mode', type=str, default='standard', 
-                        choices=['standard', 'advanced'],
-                        help='Training mode: standard or advanced with k-fold')
+                        choices=['standard', 'advanced', 'correlation'],
+                        help='Training mode: standard, advanced with k-fold, or correlation-focused')
     parser.add_argument('--train_data', type=str, default='data/train.parquet',
                         help='Path to training data')
     parser.add_argument('--val_data', type=str, default='data/validation.parquet',
@@ -279,8 +361,13 @@ def main():
     try:
         if args.mode == 'standard':
             train_standard(args)
-        else:  # advanced mode
+        elif args.mode == 'advanced':
             train_advanced(args)
+        elif args.mode == 'correlation':
+            train_correlation(args)
+        else:
+            print(f"Unknown mode: {args.mode}")
+            print("Choose from 'standard', 'advanced', or 'correlation'")
             
     except Exception as e:
         print(f"Error occurred: {str(e)}")
