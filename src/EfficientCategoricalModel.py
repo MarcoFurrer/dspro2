@@ -5,7 +5,7 @@ os.environ["TF_XLA_FLAGS"] = "--tf_xla_enable_xla_devices=false"  # disables bro
 from src.data_handler import DataHandler
 from src.model_manager import ModelManager
 from src.model_evaluator import ModelEvaluator
-from src.Visualizer import Visualizer
+from visualization.Visualizer import Visualizer
 
 class EfficientCategoricalModel:
     """
