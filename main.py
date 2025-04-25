@@ -88,7 +88,7 @@ def train_model(args):
     feature_subsets = {
         "small": "small",
         "medium": "medium",
-        "large": "large"
+        "all": "all"
     }
     
     # Select model and optimizer based on args
@@ -336,7 +336,7 @@ def main():
                         choices=['adam', 'improved'],
                         help='Optimizer to use for training')
     parser.add_argument('--feature_subset', type=str, default='medium', 
-                        choices=['small', 'medium', 'large'],
+                        choices=['small', 'medium', 'all'],
                         help='Size of feature subset to use')
     
     # Training configuration

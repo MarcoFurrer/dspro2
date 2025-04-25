@@ -2,10 +2,34 @@ import tensorflow as tf
 from keras.layers import (
     Dense, Input, Dropout, BatchNormalization,
     Add, Concatenate, MultiHeadAttention, LayerNormalization,
-    Reshape, GlobalAveragePooling1D, Layer
+    Reshape, GlobalAveragePooling1D, Layer, LeakyReLU, GaussianNoise
 )
 from keras.models import Model
 import numpy as np
+
+class FeatureImportanceLayer(Layer):
+    """Layer that learns feature importance weights"""
+    def __init__(self, regularization=1e-4, **kwargs):
+        super(FeatureImportanceLayer, self).__init__(**kwargs)
+        self.regularization = regularization
+        
+    def build(self, input_shape):
+        self.feature_weights = self.add_weight(
+            shape=(input_shape[-1],),
+            initializer='ones',
+            regularizer=tf.keras.regularizers.l2(self.regularization),
+            trainable=True,
+            name="feature_importance_weights"
+        )
+        
+    def call(self, inputs):
+        # Apply learned importance weights
+        return inputs * tf.nn.softmax(self.feature_weights)
+    
+    def get_config(self):
+        config = super(FeatureImportanceLayer, self).get_config()
+        config.update({"regularization": self.regularization})
+        return config
 
 class FeatureInteractionBlock(Layer):
     """Enhanced feature interaction block that captures both linear and non-linear relationships"""
@@ -115,7 +139,7 @@ class SelfAttentionBlock(Layer):
         
         # FFN using sequential to avoid shape issues
         self.ffn = tf.keras.Sequential([
-            Dense(self.input_dim, activation='swish'),  # Reduced size to avoid dimension mismatch
+            Dense(self.input_dim * 2, activation='swish'),  # Increased capacity
             Dropout(self.dropout_rate),
             Dense(self.input_dim)
         ])
@@ -202,46 +226,117 @@ class ResidualBlock(Layer):
         })
         return config
 
-def create_correlation_model(input_shape, output_dim=1):
-    """Creates a model specifically designed to learn feature correlations rather than just distribution"""
+# Enhanced Correlation Model - Improved version of the existing model
+def create_enhanced_correlation_model(input_shape, output_dim=1):
+    """Creates an improved model specifically designed to learn feature correlations"""
     # Ensure input_shape is correctly defined
     if isinstance(input_shape, int):
         input_shape = (input_shape,)
         
     inputs = Input(shape=input_shape)
     
-    # First extract basic features with residual blocks
-    x = Dense(128, activation='swish')(inputs)
+    # Add some noise for regularization
+    x = GaussianNoise(0.01)(inputs)
+    
+    # First extract basic features with residual blocks - increased capacity
+    x = Dense(192, activation='swish')(x)
     x = BatchNormalization()(x)
     
     # Multiple residual blocks for deeper representation
-    x = ResidualBlock(128, dropout_rate=0.2)(x)
-    x = ResidualBlock(128, dropout_rate=0.2)(x)
+    x = ResidualBlock(192, dropout_rate=0.15)(x)
+    x = ResidualBlock(192, dropout_rate=0.15)(x)
+    x = ResidualBlock(192, dropout_rate=0.15)(x)
     
     # Feature interaction block to explicitly model pairwise interactions
-    x = FeatureInteractionBlock(128, dropout_rate=0.2)(x)  # Reduced size to avoid dimension mismatch
+    x = FeatureInteractionBlock(160, dropout_rate=0.15)(x)
     
-    # Self-attention to capture global dependencies
-    attn = SelfAttentionBlock(num_heads=4, key_dim=16, dropout_rate=0.1)(x)
+    # Multiple attention heads for better global feature capturing
+    attn1 = SelfAttentionBlock(num_heads=4, key_dim=16, dropout_rate=0.1)(x)
+    attn2 = SelfAttentionBlock(num_heads=6, key_dim=24, dropout_rate=0.1)(x)
     
     # Combine with a skip connection
-    x = Concatenate()([x, attn])
+    x = Concatenate()([x, attn1, attn2])
     
-    # Final layers
-    x = Dense(64, activation='swish')(x)  # Reduced size for better convergence
-    x = Dropout(0.1)(x)  # Reduced dropout rate
+    # Final layers with increased capacity
+    x = Dense(128, activation='swish')(x)
+    x = BatchNormalization()(x)
+    x = Dropout(0.1)(x)
+    
+    # Additional layer for better expressivity
+    x = Dense(64, activation='swish')(x)
+    x = Dropout(0.1)(x)
     
     # Output layer
     outputs = Dense(output_dim, activation='linear')(x)
     
     # Create model
-    model = Model(inputs=inputs, outputs=outputs, name="CorrelationModel")
+    model = Model(inputs=inputs, outputs=outputs, name="EnhancedCorrelationModel")
     
     return model
 
-# We need a function that returns a model (not an instance)
+# Advanced model designed to handle all features effectively
+def create_advanced_full_model(input_shape, output_dim=1):
+    """Creates a more advanced model designed to handle all features efficiently"""
+    # Ensure input_shape is correctly defined
+    if isinstance(input_shape, int):
+        input_shape = (input_shape,)
+        
+    inputs = Input(shape=input_shape)
+    
+    # Feature importance layer to learn which features matter most
+    x = FeatureImportanceLayer()(inputs)
+    
+    # Add noise for regularization and generalization
+    x = GaussianNoise(0.01)(x)
+    
+    # Initial feature extraction with larger capacity
+    x = Dense(384, activation=None)(x)
+    x = LeakyReLU(alpha=0.1)(x)
+    x = BatchNormalization()(x)
+    
+    # First block of processing
+    block1 = ResidualBlock(384, dropout_rate=0.2)(x)
+    block1 = ResidualBlock(384, dropout_rate=0.2)(block1)
+    block1 = ResidualBlock(384, dropout_rate=0.2)(block1)
+    
+    # Feature interaction to model complex relationships
+    interactions = FeatureInteractionBlock(320, dropout_rate=0.2)(block1)
+    
+    # Multi-headed attention for global context
+    attention1 = SelfAttentionBlock(num_heads=8, key_dim=32, dropout_rate=0.15)(block1)
+    attention2 = SelfAttentionBlock(num_heads=4, key_dim=64, dropout_rate=0.15)(block1)
+    
+    # Combine all processing paths
+    combined = Concatenate()([block1, interactions, attention1, attention2])
+    
+    # Dimensional reduction with residual connections
+    x = Dense(256, activation='swish')(combined)
+    x = BatchNormalization()(x)
+    x = Dropout(0.15)(x)
+    
+    # Deep representation with reduced dimensions
+    x = ResidualBlock(192, dropout_rate=0.15)(x)
+    x = ResidualBlock(192, dropout_rate=0.15)(x)
+    
+    # Final processing
+    x = Dense(128, activation='swish')(x)
+    x = BatchNormalization()(x)
+    x = Dropout(0.1)(x)
+    
+    x = Dense(64, activation='swish')(x)
+    x = Dropout(0.1)(x)
+    
+    # Output layer
+    outputs = Dense(output_dim, activation='linear')(x)
+    
+    # Create model
+    model = Model(inputs=inputs, outputs=outputs, name="AdvancedFullModel")
+    
+    return model
+
+# Factory functions for the models
 def model(input_shape=(705,)):
-    """Factory function to create a model with specified input shape"""
+    """Factory function for the enhanced correlation model"""
     # Handle various input shape formats
     if isinstance(input_shape, tuple) and len(input_shape) == 1:
         # Already in correct format
@@ -252,4 +347,18 @@ def model(input_shape=(705,)):
         # Default fallback
         input_shape = (705,)
         
-    return create_correlation_model(input_shape)
+    return create_enhanced_correlation_model(input_shape)
+
+def advanced_model(input_shape=(2376,)):
+    """Factory function for the advanced full-featured model"""
+    # Handle various input shape formats
+    if isinstance(input_shape, tuple) and len(input_shape) == 1:
+        # Already in correct format
+        pass
+    elif isinstance(input_shape, int):
+        input_shape = (input_shape,)
+    elif not isinstance(input_shape, tuple):
+        # Default fallback for full features
+        input_shape = (2376,)
+        
+    return create_advanced_full_model(input_shape)
