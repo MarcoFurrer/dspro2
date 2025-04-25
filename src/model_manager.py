@@ -27,6 +27,11 @@ class ModelManager:
         """Train the model using memory-efficient batch processing"""
         if self.model is None:
             raise ValueError("No model provided for training")
+        
+        # Check if model is a factory function and create the actual model instance
+        if callable(self.model) and not isinstance(self.model, tf.keras.Model):
+            print(f"Creating model instance from factory function with input shape ({self.feature_count},)")
+            self.model = self.model((self.feature_count,))
             
         print(f"Model summary:\n{self.model.summary()}")
         self.model.compile(optimizer=self.optimizer, loss='mae', metrics=['mae'])

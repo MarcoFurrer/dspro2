@@ -11,6 +11,7 @@ import argparse
 import numpy as np
 import tensorflow as tf
 from sklearn.model_selection import KFold
+import pandas as pd
 
 # Set seed for reproducibility
 np.random.seed(42)
@@ -64,18 +65,63 @@ def create_callbacks(model_name="model", use_advanced=False):
     
     return callbacks, log_dir
 
-def train_standard(args):
-    """Train using standard approach"""
-    print("Initializing standard model training...")
+def train_model(args):
+    """Unified training function that handles all model types and training strategies"""
+    print("\n" + "="*50)
+    print(f"Starting model training: {args.model_type} mode with {args.training_mode}")
+    print("="*50)
+    
+    # Model selection based on model_type
+    models = {
+        "deep": deep_model,
+        "improved": improved_model,
+        "correlation": correlation_model
+    }
+    
+    # Optimizer selection
+    optimizers = {
+        "adam": adam_optimizer,
+        "improved": improved_optimizer
+    }
+    
+    # Feature subset selection
+    feature_subsets = {
+        "small": "small",
+        "medium": "medium",
+        "large": "large"
+    }
     
     # Select model and optimizer based on args
-    model = improved_model if args.use_improved_model else deep_model
-    optimizer = improved_optimizer if args.use_improved_optimizer else adam_optimizer
+    model = models.get(args.model_type)
+    if not model:
+        raise ValueError(f"Unknown model type: {args.model_type}. Choose from: {', '.join(models.keys())}")
     
-    # Create callbacks
-    callbacks, log_dir = create_callbacks(use_advanced=False)
+    optimizer = optimizers.get(args.optimizer)
+    if not optimizer:
+        raise ValueError(f"Unknown optimizer: {args.optimizer}. Choose from: {', '.join(optimizers.keys())}")
+    
+    subset = feature_subsets.get(args.feature_subset)
+    if not subset:
+        raise ValueError(f"Unknown feature subset: {args.feature_subset}. Choose from: {', '.join(feature_subsets.keys())}")
+    
+    # Create model name based on configuration
+    model_name = f"{args.model_type.capitalize()}Model"
+    
+    # Training mode selection
+    if args.training_mode == "standard":
+        return train_single_model(args, model, optimizer, subset, model_name)
+    elif args.training_mode == "kfold":
+        return train_with_kfold(args, model, optimizer, subset, model_name)
+    else:
+        raise ValueError(f"Unknown training mode: {args.training_mode}. Choose from: standard, kfold")
+
+def train_single_model(args, model, optimizer, feature_subset, model_name):
+    """Train a single model (no cross-validation)"""
+    # Create callbacks based on model name and settings
+    callbacks, log_dir = create_callbacks(model_name=model_name, use_advanced=args.use_advanced_callbacks)
     
     # Initialize model
+    print(f"Initializing {model_name} model...")
     efficient_model = EfficientCategoricalModel(
         data_path_train=args.train_data,
         data_path_val=args.val_data,
@@ -83,7 +129,8 @@ def train_standard(args):
         data_path_meta_model=args.meta_model,
         batch_size=args.batch_size,
         model=model,
-        optimizer=optimizer
+        optimizer=optimizer,
+        subset_features=feature_subset
     )
     
     # Train the model
@@ -91,6 +138,11 @@ def train_standard(args):
         epochs=args.epochs,
         callbacks=callbacks
     )
+    
+    # Save the trained model
+    model_path = f"exports/{model_name}_best.keras"
+    model.save(model_path)
+    print(f"Model saved to: {model_path}")
     
     # Validate model if requested
     if args.validate:
@@ -101,25 +153,20 @@ def train_standard(args):
         for metric, value in performance_metrics.items():
             print(f"{metric}: {value}")
     
-    print("Training complete!")
+    # Analyze feature importance if requested
+    if args.analyze_features:
+        analyze_feature_correlations(efficient_model)
+    
+    print(f"\n{model_name} training complete!")
     print(f"TensorBoard logs saved to: {log_dir}")
     print("Run the following command to start TensorBoard:")
     print(f"tensorboard --logdir={log_dir}")
     
     return model, history, efficient_model
 
-def train_advanced(args):
+def train_with_kfold(args, model, optimizer, feature_subset, model_name):
     """Train using K-fold cross-validation and ensemble methods"""
-    print("\n" + "="*50)
-    print("Starting advanced training with K-fold cross-validation")
-    print("="*50)
-    
-    # Load data 
-    print("Loading data...")
-    data_path = args.train_data
-    val_path = args.val_data
-    meta_path = args.meta_data
-    meta_model = args.meta_model
+    print(f"\nPerforming {args.n_folds}-fold cross-validation...")
     
     # Initialize fold results
     fold_models = []
@@ -130,25 +177,24 @@ def train_advanced(args):
     # Initialize a base model to get feature information
     print("Initializing base model to get feature information...")
     base_model = EfficientCategoricalModel(
-        data_path_train=data_path,
-        data_path_val=val_path,
-        data_path_metadata=meta_path,
-        data_path_meta_model=meta_model,
+        data_path_train=args.train_data,
+        data_path_val=args.val_data,
+        data_path_metadata=args.meta_data,
+        data_path_meta_model=args.meta_model,
         batch_size=args.batch_size
     )
     base_model.data_handler.get_dataset_info()
     feature_set = base_model.data_handler.feature_set
     
     # Initialize K-fold cross-validation
-    print(f"\nPerforming {args.n_folds}-fold cross-validation...")
     kf = KFold(n_splits=args.n_folds, shuffle=True, random_state=42)
     
     # Load data for K-fold split
     from src.data_handler import DataHandler
     data_handler = DataHandler(
-        data_path_train=data_path,
-        data_path_val=val_path,
-        data_path_metadata=meta_path,
+        data_path_train=args.train_data,
+        data_path_val=args.val_data,
+        data_path_metadata=args.meta_data,
         batch_size=args.batch_size
     )
     
@@ -166,21 +212,21 @@ def train_advanced(args):
         fold_val = train_data.iloc[val_idx]
         
         # Create model name for this fold
-        model_name = f"AdvancedModel_fold{fold}"
+        fold_model_name = f"{model_name}_fold{fold}"
         
         # Create callbacks for this fold
-        callbacks, log_dir = create_callbacks(model_name=model_name, use_advanced=True)
+        callbacks, log_dir = create_callbacks(model_name=fold_model_name, use_advanced=True)
         
-        # Initialize new model for this fold with improved model and optimizer
+        # Initialize new model for this fold
         efficient_model = EfficientCategoricalModel(
-            data_path_train=data_path,
-            data_path_val=val_path,
-            data_path_metadata=meta_path,
-            data_path_meta_model=meta_model,
+            data_path_train=args.train_data,
+            data_path_val=args.val_data,
+            data_path_metadata=args.meta_data,
+            data_path_meta_model=args.meta_model,
             batch_size=args.batch_size,
-            model=improved_model,
-            optimizer=improved_optimizer,
-            subset_features="medium"
+            model=model,
+            optimizer=optimizer,
+            subset_features=feature_subset
         )
         
         # Set the feature_set directly from the base model
@@ -195,17 +241,17 @@ def train_advanced(args):
         y_val = fold_val['target'].values
         
         # Get the model from model manager
-        model = efficient_model.model_manager.model
+        fold_model = efficient_model.model_manager.model
         
         # Compile model
-        model.compile(
+        fold_model.compile(
             optimizer=efficient_model.model_manager.optimizer,
             loss='mae',
             metrics=['mae', 'mse']
         )
         
         # Train the model
-        history = model.fit(
+        history = fold_model.fit(
             X_train, y_train,
             validation_data=(X_val, y_val),
             epochs=args.epochs,
@@ -217,16 +263,16 @@ def train_advanced(args):
         # Store fold results
         fold_results[fold] = {
             'history': history.history,
-            'model': model,
+            'model': fold_model,
             'val_loss': min(history.history['val_loss'])
         }
         
         # Add model to ensemble
-        fold_models.append(model)
+        fold_models.append(fold_model)
         
         # Save model for this fold
-        model_path = f"exports/{model_name}.keras"
-        model.save(model_path)
+        model_path = f"exports/{fold_model_name}.keras"
+        fold_model.save(model_path)
         print(f"Model for fold {fold+1} saved to: {model_path}")
         
         # Check if this is the best model so far
@@ -241,59 +287,16 @@ def train_advanced(args):
     print(f"Best validation loss: {best_val_loss:.4f}")
     print(f"Best model saved to: {best_model_path}")
     
-    print("\nAdvanced training complete!")
+    print("\nCross-validation training complete!")
     print("Run TensorBoard to visualize training results for all folds:")
     print("tensorboard --logdir=logs/fit")
     
     return fold_models, fold_results, best_model_path
 
-def train_correlation(args):
-    """Train using a model specifically designed to learn feature correlations rather than distribution"""
-    print("\n" + "="*50)
-    print("Starting correlation-focused model training")
-    print("="*50)
-    
-    # Create callbacks with advanced settings
-    model_name = "CorrelationModel"
-    callbacks, log_dir = create_callbacks(model_name=model_name, use_advanced=True)
-    
-    # Initialize model with the correlation model
-    print("Initializing correlation model...")
-    efficient_model = EfficientCategoricalModel(
-        data_path_train=args.train_data,
-        data_path_val=args.val_data,
-        data_path_metadata=args.meta_data,
-        data_path_meta_model=args.meta_model,
-        batch_size=args.batch_size,
-        model=correlation_model,
-        optimizer=improved_optimizer,  # Using improved optimizer for better convergence
-        subset_features="medium"  # Changed from "large" to "medium" to match available feature sets
-    )
-    
-    # Train the model
-    model, history = efficient_model.train(
-        epochs=args.epochs,
-        callbacks=callbacks
-    )
-    
-    # Save the trained model
-    model_path = f"exports/{model_name}_best.keras"
-    model.save(model_path)
-    print(f"Correlation model saved to: {model_path}")
-    
-    # Validate model if requested
-    if args.validate:
-        print("\nValidating correlation model...")
-        efficient_model.validate_model()
-        performance_metrics = efficient_model.performance_eval()
-        print("\nPerformance Metrics:")
-        for metric, value in performance_metrics.items():
-            print(f"{metric}: {value}")
-    
-    # Analyze feature importance and correlations
+def analyze_feature_correlations(efficient_model):
+    """Analyze feature importance and correlations"""
     print("\nAnalyzing feature correlations...")
     
-    # Get feature importances from the model
     try:
         # Prepare validation data
         val_data = efficient_model.data_handler.load_val_data()
@@ -301,10 +304,9 @@ def train_correlation(args):
         y_val = val_data['target'].values
         
         # Make predictions
-        y_pred = model.predict(X_val)
+        y_pred = efficient_model.model_manager.model.predict(X_val)
         
         # Compute feature correlations with target
-        import pandas as pd
         feature_df = pd.DataFrame(X_val, columns=efficient_model.data_handler.feature_set)
         feature_df['target'] = y_val
         feature_df['prediction'] = y_pred.flatten()
@@ -320,21 +322,29 @@ def train_correlation(args):
         print(pred_corrs.head(11))  # +1 because prediction itself will be first
     except Exception as e:
         print(f"Error analyzing correlations: {str(e)}")
-    
-    print("\nCorrelation model training complete!")
-    print(f"TensorBoard logs saved to: {log_dir}")
-    print("Run the following command to start TensorBoard:")
-    print(f"tensorboard --logdir={log_dir}")
-    
-    return model, history, efficient_model
 
 def main():
     """Main function to handle different training modes"""
     # Parse command line arguments
     parser = argparse.ArgumentParser(description='Train Efficient Categorical Model')
-    parser.add_argument('--mode', type=str, default='standard', 
-                        choices=['standard', 'advanced', 'correlation'],
-                        help='Training mode: standard, advanced with k-fold, or correlation-focused')
+    
+    # Model configuration
+    parser.add_argument('--model_type', type=str, default='deep', 
+                        choices=['deep', 'improved', 'correlation'],
+                        help='Model architecture to use')
+    parser.add_argument('--optimizer', type=str, default='adam', 
+                        choices=['adam', 'improved'],
+                        help='Optimizer to use for training')
+    parser.add_argument('--feature_subset', type=str, default='medium', 
+                        choices=['small', 'medium', 'large'],
+                        help='Size of feature subset to use')
+    
+    # Training configuration
+    parser.add_argument('--training_mode', type=str, default='standard',
+                        choices=['standard', 'kfold'],
+                        help='Training mode: standard (single model) or kfold (cross-validation)')
+    
+    # Data paths
     parser.add_argument('--train_data', type=str, default='data/train.parquet',
                         help='Path to training data')
     parser.add_argument('--val_data', type=str, default='data/validation.parquet',
@@ -343,32 +353,54 @@ def main():
                         help='Path to metadata')
     parser.add_argument('--meta_model', type=str, default='data/meta_model.parquet',
                         help='Path to meta model')
+    
+    # Training parameters
     parser.add_argument('--batch_size', type=int, default=64,
                         help='Batch size for training')
     parser.add_argument('--epochs', type=int, default=10,
                         help='Number of epochs to train')
     parser.add_argument('--n_folds', type=int, default=5,
-                        help='Number of folds for cross-validation (advanced mode only)')
-    parser.add_argument('--use_improved_model', action='store_true',
-                        help='Use improved model architecture (standard mode only)')
-    parser.add_argument('--use_improved_optimizer', action='store_true',
-                        help='Use improved optimizer (standard mode only)')
+                        help='Number of folds for cross-validation (kfold mode only)')
+    parser.add_argument('--use_advanced_callbacks', action='store_true',
+                        help='Use advanced callbacks (early stopping, LR reduction, etc.)')
+    
+    # Evaluation and analysis
     parser.add_argument('--validate', action='store_true',
                         help='Validate model after training')
+    parser.add_argument('--analyze_features', action='store_true',
+                        help='Analyze feature correlations after training')
+    
+    # For backward compatibility with old command line format
+    parser.add_argument('--mode', type=str, 
+                        choices=['standard', 'advanced', 'correlation'],
+                        help='Legacy mode parameter (use --model_type and --training_mode instead)')
+    parser.add_argument('--use_improved_model', action='store_true',
+                        help='Legacy parameter (use --model_type improved instead)')
+    parser.add_argument('--use_improved_optimizer', action='store_true',
+                        help='Legacy parameter (use --optimizer improved instead)')
     
     args = parser.parse_args()
     
-    try:
+    # Handle legacy parameters for backward compatibility
+    if args.mode:
         if args.mode == 'standard':
-            train_standard(args)
+            args.model_type = 'deep' if not args.use_improved_model else 'improved'
+            args.optimizer = 'adam' if not args.use_improved_optimizer else 'improved'
+            args.training_mode = 'standard'
         elif args.mode == 'advanced':
-            train_advanced(args)
+            args.model_type = 'improved'
+            args.optimizer = 'improved'
+            args.training_mode = 'kfold'
+            args.use_advanced_callbacks = True
         elif args.mode == 'correlation':
-            train_correlation(args)
-        else:
-            print(f"Unknown mode: {args.mode}")
-            print("Choose from 'standard', 'advanced', or 'correlation'")
-            
+            args.model_type = 'correlation'
+            args.optimizer = 'improved'
+            args.training_mode = 'standard'
+            args.use_advanced_callbacks = True
+    
+    try:
+        # Train the model with unified approach
+        train_model(args)
     except Exception as e:
         print(f"Error occurred: {str(e)}")
         import traceback

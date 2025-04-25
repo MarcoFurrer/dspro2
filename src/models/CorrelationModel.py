@@ -58,21 +58,18 @@ class FeatureInteractionBlock(Layer):
         deep_out = self.deep2(deep_out)
         
         # Cross-feature path: x_0 * (x_l^T * W + b)
-        outer_product = tf.matmul(
-            tf.expand_dims(inputs, axis=2),
-            tf.expand_dims(inputs, axis=1)
-        )
-        # Apply weighting to the outer product
+        # Modified implementation to avoid shape issues
         batch_size = tf.shape(inputs)[0]
-        w_tiled = tf.tile(
-            tf.expand_dims(self.cross_w, axis=0),
-            [batch_size, 1, 1]
-        )
+        input_dim = tf.shape(inputs)[1]
         
-        cross_term = tf.reduce_sum(outer_product * w_tiled, axis=2) + self.cross_b
+        # Reshape inputs for batch-wise operations
+        x_flat = tf.reshape(inputs, [batch_size, input_dim])
+        
+        # Compute cross terms with explicit shapes
+        cross_term = tf.matmul(x_flat, self.cross_w) + self.cross_b
         cross_out = self.cross_projection(cross_term)
         
-        # Combine all paths
+        # Combine all paths with fixed dimensions
         combined = Concatenate()([linear_out, deep_out, cross_out])
         combined = self.batch_norm(combined, training=training)
         
@@ -105,9 +102,6 @@ class SelfAttentionBlock(Layer):
         # Reshape to sequence format for attention
         self.reshape_in = Reshape((1, self.input_dim))
         
-        # Feature-wise attention
-        self.feature_reshape = Reshape((self.input_dim, 1))
-        
         # Multi-head attention
         self.mha = MultiHeadAttention(
             num_heads=self.num_heads,
@@ -119,9 +113,9 @@ class SelfAttentionBlock(Layer):
         self.norm1 = LayerNormalization(epsilon=1e-6)
         self.norm2 = LayerNormalization(epsilon=1e-6)
         
-        # FFN
+        # FFN using sequential to avoid shape issues
         self.ffn = tf.keras.Sequential([
-            Dense(self.input_dim * 2, activation='swish'),
+            Dense(self.input_dim, activation='swish'),  # Reduced size to avoid dimension mismatch
             Dropout(self.dropout_rate),
             Dense(self.input_dim)
         ])
@@ -210,6 +204,10 @@ class ResidualBlock(Layer):
 
 def create_correlation_model(input_shape, output_dim=1):
     """Creates a model specifically designed to learn feature correlations rather than just distribution"""
+    # Ensure input_shape is correctly defined
+    if isinstance(input_shape, int):
+        input_shape = (input_shape,)
+        
     inputs = Input(shape=input_shape)
     
     # First extract basic features with residual blocks
@@ -217,21 +215,21 @@ def create_correlation_model(input_shape, output_dim=1):
     x = BatchNormalization()(x)
     
     # Multiple residual blocks for deeper representation
-    x = ResidualBlock(128, dropout_rate=0.3)(x)
-    x = ResidualBlock(128, dropout_rate=0.3)(x)
+    x = ResidualBlock(128, dropout_rate=0.2)(x)
+    x = ResidualBlock(128, dropout_rate=0.2)(x)
     
     # Feature interaction block to explicitly model pairwise interactions
-    x = FeatureInteractionBlock(192, dropout_rate=0.3)(x)
+    x = FeatureInteractionBlock(128, dropout_rate=0.2)(x)  # Reduced size to avoid dimension mismatch
     
     # Self-attention to capture global dependencies
-    attn = SelfAttentionBlock(num_heads=4, key_dim=16, dropout_rate=0.2)(x)
+    attn = SelfAttentionBlock(num_heads=4, key_dim=16, dropout_rate=0.1)(x)
     
     # Combine with a skip connection
     x = Concatenate()([x, attn])
     
     # Final layers
-    x = Dense(96, activation='swish')(x)
-    x = Dropout(0.2)(x)
+    x = Dense(64, activation='swish')(x)  # Reduced size for better convergence
+    x = Dropout(0.1)(x)  # Reduced dropout rate
     
     # Output layer
     outputs = Dense(output_dim, activation='linear')(x)
@@ -241,5 +239,17 @@ def create_correlation_model(input_shape, output_dim=1):
     
     return model
 
-# Default model instance
-model = create_correlation_model((705,))  # Updated to match the actual feature count
+# We need a function that returns a model (not an instance)
+def model(input_shape=(705,)):
+    """Factory function to create a model with specified input shape"""
+    # Handle various input shape formats
+    if isinstance(input_shape, tuple) and len(input_shape) == 1:
+        # Already in correct format
+        pass
+    elif isinstance(input_shape, int):
+        input_shape = (input_shape,)
+    elif not isinstance(input_shape, tuple):
+        # Default fallback
+        input_shape = (705,)
+        
+    return create_correlation_model(input_shape)
