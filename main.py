@@ -152,6 +152,9 @@ def train_single_model(args, model, optimizer, feature_subset, model_name):
         print("\nPerformance Metrics:")
         for metric, value in performance_metrics.items():
             print(f"{metric}: {value}")
+        
+        # Display prediction examples with continuous values
+        display_prediction_examples(efficient_model)
     
     # Analyze feature importance if requested
     if args.analyze_features:
@@ -322,6 +325,59 @@ def analyze_feature_correlations(efficient_model):
         print(pred_corrs.head(11))  # +1 because prediction itself will be first
     except Exception as e:
         print(f"Error analyzing correlations: {str(e)}")
+
+def display_prediction_examples(efficient_model, num_examples=10):
+    """Display examples of predictions and targets with continuous values"""
+    print("\n" + "="*50)
+    print("Prediction Examples (Continuous Values)")
+    print("="*50)
+    
+    try:
+        # Prepare validation data
+        val_data = efficient_model.data_handler.load_val_data()
+        X_val = val_data[efficient_model.data_handler.feature_set].values
+        y_val = val_data['target'].values
+        
+        # Get a sample of indices to display
+        np.random.seed(42)  # For reproducibility
+        sample_indices = np.random.choice(len(y_val), size=min(num_examples, len(y_val)), replace=False)
+        
+        # Make predictions for these samples
+        X_sample = X_val[sample_indices]
+        y_sample = y_val[sample_indices]
+        y_pred_sample = efficient_model.model_manager.model.predict(X_sample).flatten()
+        
+        # Create a DataFrame to display the results nicely
+        results_df = pd.DataFrame({
+            'Example': range(1, len(sample_indices) + 1),
+            'True Value': y_sample,
+            'Prediction (Continuous)': y_pred_sample,
+            'Absolute Error': np.abs(y_sample - y_pred_sample)
+        })
+        
+        # Add some analysis
+        results_df['Prediction (Rounded)'] = np.round(results_df['Prediction (Continuous)'] * 4) / 4
+        results_df['Correct?'] = results_df['Prediction (Rounded)'] == results_df['True Value']
+        
+        # Display the results
+        pd.set_option('display.precision', 4)
+        print(results_df)
+        
+        # Calculate and display summary statistics
+        mae = np.mean(np.abs(y_sample - y_pred_sample))
+        accuracy = np.mean(results_df['Correct?'])
+        
+        print("\nSummary Statistics:")
+        print(f"Mean Absolute Error: {mae:.4f}")
+        print(f"Accuracy (after rounding): {accuracy:.2%}")
+        
+        # Reset display options
+        pd.reset_option('display.precision')
+        
+    except Exception as e:
+        print(f"Error displaying prediction examples: {str(e)}")
+        import traceback
+        traceback.print_exc()
 
 def main():
     """Main function to handle different training modes"""
