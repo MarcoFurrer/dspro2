@@ -5,3 +5,4 @@ data/*
 .env
 *.h5
 *.keras
+notebooks/gradient_models/lgbm_regressor_model.pkl

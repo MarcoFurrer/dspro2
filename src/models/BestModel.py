@@ -6,6 +6,7 @@ from keras.layers import (
 )
 from keras.models import Model
 import numpy as np
+import pandas as pd
 
 class ConditionalDistributionLayer(Layer):
     """Layer that learns the conditional distribution of features given target values."""
@@ -247,3 +248,18 @@ def model(input_shape=(705,)):
         input_shape = (705,)
         
     return create_best_model(input_shape)
+
+
+# Assume 'model' is your trained model and 'feature_cols' is a list of feature names
+def predict(
+    live_features: pd.DataFrame,
+    live_benchmark_models: pd.DataFrame
+) -> pd.DataFrame:
+    # Make predictions using the trained model
+    live_predictions = model.predict(live_features[feature_cols])
+    
+    # Create a Series with the predictions, using the index of live_features
+    submission = pd.Series(live_predictions, index=live_features.index)
+    
+    # Return the predictions as a DataFrame
+    return submission.to_frame("prediction")
