@@ -20,4 +20,4 @@ model = Sequential([
     
     # Output layer
     Dense(5, activation='softmax')
-])
+], name="Wide")

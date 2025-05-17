@@ -21,4 +21,4 @@ model = Sequential([
             
             # Output layer - 5 classes for our target values
             Dense(5, activation='softmax')
-        ])
+        ], name="Base")

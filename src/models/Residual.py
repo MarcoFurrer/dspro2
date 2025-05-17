@@ -26,4 +26,4 @@ x3 = Add()([x2, x3])  # Residual connection
 # Output layer
 outputs = Dense(5, activation='softmax')(x3)
 
-model = Model(inputs=inputs, outputs=outputs)
+model = Model(inputs=inputs, outputs=outputs, name="Residual")
