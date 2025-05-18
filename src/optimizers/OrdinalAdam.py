@@ -103,7 +103,7 @@ weight_decay_scheduler = WeightDecayScheduler(
 )
 
 # Create advanced optimizer with lookahead for better convergence
-class LookaheadOptimizer(tf.keras.optimizers.Optimizer):
+class LookaheadOptimizer(tf.keras.optimizers.Optimizer, name='OrdinalAdam'):
     def __init__(self, optimizer, sync_period=5, slow_step_size=0.5, name="Lookahead", **kwargs):
         super(LookaheadOptimizer, self).__init__(name, **kwargs)
         self.optimizer = optimizer
@@ -111,6 +111,7 @@ class LookaheadOptimizer(tf.keras.optimizers.Optimizer):
         self._slow_step_size = slow_step_size
         self._step_count = None
         self._optimizer_variables = optimizer.variables()
+        self.name = name
         
     def _create_slots(self, var_list):
         self.optimizer._create_slots(var_list)

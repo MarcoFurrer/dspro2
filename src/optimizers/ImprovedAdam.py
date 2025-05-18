@@ -21,5 +21,6 @@ optimizer = Adam(
     beta_2=0.999,
     epsilon=1e-07,
     amsgrad=True,  # Use AMSGrad variant for better convergence
-    weight_decay=1e-6  # Add weight decay for additional regularization
+    weight_decay=1e-6,  # Add weight decay for additional regularization
+    name="ImprovedAdam"
 )
