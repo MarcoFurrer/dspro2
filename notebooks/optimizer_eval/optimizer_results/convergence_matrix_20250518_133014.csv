@@ -1,0 +1,4 @@
+model,Adadelta,Adagrad,Adam,Adamax,ImprovedAdam,Nadam,OrdinalAdam,RMSprop,SGD
+Advanced,9,9,8,10,8,8,10,10,9
+Base,9,10,9,10,10,10,10,9,8
+Wide,10,9,10,9,9,9,10,9,8

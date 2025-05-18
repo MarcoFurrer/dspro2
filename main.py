@@ -579,6 +579,35 @@ def train_standard_model(
     # Print model summary
     model.summary()
     
+    # Select optimizer
+    optimizer_name = config.get('optimizer', 'adam').lower()
+    try:
+        if optimizer_name == 'adam':
+            from src.optimizers.Adam import optimizer as custom_optimizer
+        elif optimizer_name == 'improvedadam':
+            from src.optimizers.ImprovedAdam import optimizer as custom_optimizer
+        elif optimizer_name == 'nadam':
+            from src.optimizers.Nadam import optimizer as custom_optimizer
+        elif optimizer_name == 'rmsprop':
+            from src.optimizers.RMSprop import optimizer as custom_optimizer
+        elif optimizer_name == 'sgd':
+            from src.optimizers.SGD import optimizer as custom_optimizer
+        elif optimizer_name == 'adadelta':
+            from src.optimizers.Adadelta import optimizer as custom_optimizer
+        elif optimizer_name == 'adagrad':
+            from src.optimizers.Adagrad import optimizer as custom_optimizer
+        elif optimizer_name == 'adamax':
+            from src.optimizers.Adamax import optimizer as custom_optimizer
+        else:
+            print(f"Warning: Optimizer {optimizer_name} not found, using default Adam")
+            from src.optimizers.Adam import optimizer as custom_optimizer
+        
+        print(f"Using optimizer: {custom_optimizer.name}")
+    except Exception as e:
+        print(f"Error loading optimizer {optimizer_name}: {e}")
+        print("Using default Adam optimizer")
+        custom_optimizer = "adam"
+    
     # Select loss function
     if loss_fn == "mae":
         loss = "mae"
@@ -863,6 +892,14 @@ def parse_args():
         default="correlation",
         choices=["base", "deep", "wide", "residual", "correlation", "advanced", "best"],
         help="Model architecture to train"
+    )
+    
+    parser.add_argument(
+        "--optimizer",
+        type=str,
+        default="Adam",
+        choices=["Adam", "ImprovedAdam", "Nadam", "RMSprop", "SGD", "Adadelta", "Adagrad", "Adamax"],
+        help="Optimizer to use for training"
     )
     
     parser.add_argument(

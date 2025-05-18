@@ -1,0 +1,8 @@
+model,ActivationAdam,AdvancedAdam,BaseAdadelta,BaseAdagrad,BaseAdam,BaseAdamax,BaseNadam,BaseRmsProp,BaseSGD,DeepAdam,RegularizedAdam,ResidualAdam,WideAdam
+Activation,0.4804022576765835,,,,,,,,,,,,
+Advanced,,0.4714076136984189,,,,,,,,,,,
+Base,,,0.5003767179371703,0.486602521966026,0.49456628969241573,0.4759520791214952,0.49645503707417615,0.5012207278122083,0.5115297114604078,,,,
+Deep,,,,,,,,,,0.4900055623920271,,,
+Regularized,,,,,,,,,,,0.5088142661988427,,
+Residual,,,,,,,,,,,,0.48704683108701907,
+Wide,,,,,,,,,,,,,0.5067991278488628

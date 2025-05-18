@@ -1,0 +1,7 @@
+{
+  "model": "Base",
+  "optimizer": "RMSprop",
+  "epochs": 15,
+  "batch_size": 32,
+  "timestamp": "2025-05-18 13:32:15"
+}
