@@ -60,7 +60,9 @@ class DataHandler:
         for feature_set in ["small", "medium", "all"]:
             print(feature_set, len(feature_sets[feature_set]))
 
-        feature_set = feature_sets[self._subset_features]
+        # Fix for None value - use "all" features when subset_features is None
+        subset_key = self._subset_features if self._subset_features is not None else "all"
+        feature_set = feature_sets[subset_key]
         self._feature_set = feature_set
         
         # Open the parquet file
@@ -164,6 +166,19 @@ class DataHandler:
         validation = validation[~validation["era"].isin(eras_to_embargo)]
         
         return validation
+    
+    def load_train_data(self):
+        """Load training data for model training"""
+        train_data = pd.read_parquet(
+            self.data_path_train,
+            columns=["era", "target"] + self._feature_set
+        )
+        
+        # Print data info
+        print(f"Loaded training data with {len(train_data)} rows and {len(self._feature_set)} features")
+        print(f"Training eras: {train_data['era'].nunique()}")
+        
+        return train_data
     
     @property
     def feature_set(self):

@@ -30,7 +30,7 @@ from src.EfficientCategoricalModel import EfficientCategoricalModel
 
 # Import model architectures
 from src.models.Deep import model as deep_model
-from src.models.CorrelationModel import model as correlation_model, advanced_model, create_correlation_model
+from src.models.CorrelationModel import model as correlation_model, advanced_model, create_enhanced_correlation_model
 from src.models.ImprovedModel import model as improved_model
 from src.models.BestModel import model as best_model
 from src.models.Residual import model as residual_model
@@ -1001,7 +1001,7 @@ def main():
             tf.keras.layers.Dense(1)
         ], name="WideModel"),
         "residual": residual_model,
-        "correlation": create_correlation_model,
+        "correlation": create_enhanced_correlation_model,
         "advanced": advanced_model,
         "best": best_model
     }
