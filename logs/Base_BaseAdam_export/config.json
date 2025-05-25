@@ -1,0 +1,7 @@
+{
+  "model": "Base",
+  "optimizer": "BaseAdam",
+  "source": "export",
+  "export_file": "BaseAdam.keras",
+  "timestamp": "2025-05-25 22:51:03"
+}

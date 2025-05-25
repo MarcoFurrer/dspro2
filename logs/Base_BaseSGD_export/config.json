@@ -1,0 +1,7 @@
+{
+  "model": "Base",
+  "optimizer": "BaseSGD",
+  "source": "export",
+  "export_file": "BaseSGD.keras",
+  "timestamp": "2025-05-25 22:51:03"
+}

@@ -1,0 +1,7 @@
+{
+  "model": "Wide",
+  "optimizer": "Adam",
+  "epochs": 15,
+  "batch_size": 32,
+  "timestamp": "2025-05-25 22:50:26"
+}

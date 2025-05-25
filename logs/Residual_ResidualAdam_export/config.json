@@ -1,0 +1,7 @@
+{
+  "model": "Residual",
+  "optimizer": "ResidualAdam",
+  "source": "export",
+  "export_file": "ResidualAdam.keras",
+  "timestamp": "2025-05-25 22:51:03"
+}

@@ -1,0 +1,7 @@
+{
+  "model": "Advanced",
+  "optimizer": "AdvancedAdam",
+  "source": "export",
+  "export_file": "AdvancedAdam.keras",
+  "timestamp": "2025-05-25 22:51:03"
+}

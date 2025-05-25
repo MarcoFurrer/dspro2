@@ -1,0 +1,4 @@
+optimizer,Activation,Advanced,Base,Deep,Regularized,Wide
+Adam,10,9,10,10,9,9
+RMSprop,9,10,10,9,10,8
+SGD,8,10,10,9,9,10

@@ -1,0 +1,7 @@
+{
+  "model": "Regularized",
+  "optimizer": "RegularizedAdam",
+  "source": "export",
+  "export_file": "RegularizedAdam.keras",
+  "timestamp": "2025-05-25 22:51:03"
+}

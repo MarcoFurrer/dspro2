@@ -1,0 +1,7 @@
+{
+  "model": "Base",
+  "optimizer": "BaseRmsProp",
+  "source": "export",
+  "export_file": "BaseRmsProp.keras",
+  "timestamp": "2025-05-25 22:51:03"
+}

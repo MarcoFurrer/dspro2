@@ -1,0 +1,7 @@
+{
+  "model": "Base",
+  "optimizer": "SGD",
+  "epochs": 15,
+  "batch_size": 32,
+  "timestamp": "2025-05-25 22:49:40"
+}
