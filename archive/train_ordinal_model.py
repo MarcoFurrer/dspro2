@@ -15,7 +15,7 @@ import tensorflow as tf
 from keras.callbacks import EarlyStopping, ReduceLROnPlateau, TensorBoard, ModelCheckpoint
 import datetime
 import gc
-from src.EfficientCategoricalModel import EfficientCategoricalModel
+from src.model_runner import EfficientCategoricalModel
 from src.models.OrdinalModel import (
     model, ordinal_loss, ordinal_mae, 
     OrdinalLayer, FeatureInteractionLayer, SelfAttentionLayer

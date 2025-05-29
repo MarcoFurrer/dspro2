@@ -26,7 +26,7 @@ from tensorboard.plugins.hparams import api as hp
 # Import components from existing project
 from src.data_handler import DataHandler
 from src.model_evaluator import ModelEvaluator
-from src.EfficientCategoricalModel import EfficientCategoricalModel
+from src.model_runner import EfficientCategoricalModel
 
 # Import model architectures
 from src.models.Deep import model as deep_model
