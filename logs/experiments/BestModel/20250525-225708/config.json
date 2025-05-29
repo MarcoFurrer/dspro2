@@ -1,0 +1,17 @@
+{
+  "model": "BestModel",
+  "optimizer": "adam",
+  "learning_rate": 0.0003,
+  "batch_size": 1,
+  "epochs": 50,
+  "feature_subset": "medium",
+  "loss_fn": "mae",
+  "validation_split": 0.15,
+  "dropout_rate": 0.3,
+  "features_count": 705,
+  "total_features": 2376,
+  "timestamp": "20250525-225708",
+  "layers": [],
+  "neurons": [],
+  "early_stopping_patience": 15
+}

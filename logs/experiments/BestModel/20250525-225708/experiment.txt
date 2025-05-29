@@ -1,0 +1,7 @@
+Experiment: BestModel
+Date: 2025-05-25 22:57:08
+Features: medium
+Loss Function: mae
+Optimizer: adam (lr=0.0003)
+Batch Size: 1
+Max Epochs: 50
