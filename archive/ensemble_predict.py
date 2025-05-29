@@ -12,7 +12,7 @@ import pandas as pd
 import tensorflow as tf
 import argparse
 import matplotlib.pyplot as plt
-from src.EfficientCategoricalModel import EfficientCategoricalModel
+from src.model_runner import EfficientCategoricalModel
 from src.optimizers.ImprovedAdam import optimizer as improved_optimizer
 
 def ensemble_predict(models, X, target_mapping=None):

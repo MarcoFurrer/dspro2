@@ -14,7 +14,7 @@ import tensorflow as tf
 from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau, TensorBoard
 import datetime
 
-from src.EfficientCategoricalModel import EfficientCategoricalModel
+from src.model_runner import EfficientCategoricalModel
 from src.models.ImprovedModel import model as improved_model
 from src.optimizers.ImprovedAdam import optimizer as improved_optimizer
 from src.models.Base import model as base_model

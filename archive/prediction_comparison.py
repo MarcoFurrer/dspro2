@@ -12,7 +12,7 @@ import pandas as pd
 import numpy as np
 import random
 import matplotlib.pyplot as plt
-from src.EfficientCategoricalModel import EfficientCategoricalModel
+from src.model_runner import EfficientCategoricalModel
 from src.models.ImprovedModel import model as improved_model
 from src.optimizers.ImprovedAdam import optimizer as improved_optimizer
 
