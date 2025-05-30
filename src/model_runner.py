@@ -16,33 +16,38 @@ from keras.optimizers import Adam
 from numerapi import NumerAPI as napi
 from numerai_tools.scoring import numerai_corr, correlation_contribution
 from config import *
+from typing import Literal
 
 
 class ModelRunner:
     def __init__(
         self,
-        data_path_train=None,
-        data_path_val=None,
-        data_path_metadata=None,
-        data_path_meta_model=None,
-        output_path="exports",
-        batch_size=64,
-        subset_features="small",
+        path_train: str = "data/train.parquet",
+        path_val: str = "data/validation.parquet",
+        path_metadata: str = "data/features.json",
+        path_meta_model: str = "data/meta_model.parquet",
+        path_features: str = "data/features.json",
+        data_version: str = "v5.0",
+        output_path: str = "exports",
+        batch_size: int = 64,
+        subset_features: Literal["small", "medium", "all"] = "small",
         model=None,
     ):
-        self.data_path_train = data_path_train
-        self.data_path_val = data_path_val
-        self.data_path_metadata = data_path_metadata
-        self.data_path_meta_model = data_path_meta_model
+        self.path_train = path_train
+        self.path_val = path_val
+        self.path_metadata = path_metadata
+        self.path_meta_model = path_meta_model
+        self.path_features = path_features
+        self.data_version = data_version
         self.output_path = output_path
         self.batch_size = batch_size
-        self._subset_features = subset_features
+        self.subset_features = subset_features
         self.feature_count = None
         self.n_categories = 5  # Categories 0-4
-        self.external_model = model  # Store the external model if provided
+        self.model = model  # Store the external model if provided
         os.makedirs(output_path, exist_ok=True)
-        self._feature_set = None
-        self._target_set = None
+        self.feature_set = None
+        self.target_set = None
         self.target_mapping = {
             0.0: 0,
             0.25: 1,
@@ -58,6 +63,8 @@ class ModelRunner:
             4: 1.0,
         }  # For converting back
         self._validation = None
+        self.train_dataset = None
+        self.validation_dataset = None
 
     def _download_data(self):
         # list the datasets and available versions
@@ -119,30 +126,6 @@ class ModelRunner:
             f"Found {self.feature_count} feature columns and {len(target_cols)} target columns"
         )
 
-    # is not used
-    def _load_data(self):
-        # read the metadata and display
-        feature_metadata = json.load(open(f"{DATA_VERSION}/features.json"))
-        for metadata in feature_metadata:
-            print(metadata, len(feature_metadata[metadata]))
-
-        feature_sets = feature_metadata["feature_sets"]
-        for feature_set in ["small", "medium", "all"]:
-            print(feature_set, len(feature_sets[feature_set]))
-
-        feature_set = feature_set[subset_features]
-        self._feature_set = feature_set
-
-        # Download the training data - this will take a few minutes
-        napi.download_dataset(f"{DATA_VERSION}/train.parquet")
-
-        # Load only the "medium" feature set to
-        # Use the "all" feature set to use all features
-        self._train = pd.read_parquet(
-            f"{DATA_VERSION}/train.parquet", columns=["era", "target"] + feature_set
-        )
-        self._target_set = self._train["target"]
-
     def plot_data(self):
         # Plot the number of rows per era
         self._train.groupby("era").size().plot(
@@ -169,79 +152,51 @@ class ModelRunner:
             title="missing data", kind="hist", density=True, bins=50, ax=ax2
         )
 
-    def _create_default_model(self):
-        """Create a simple but efficient model for categorical data"""
-        model = Sequential(
-            [
-                # Input layer
-                Input(shape=(self.feature_count,), dtype=tf.float32),
-                # Hidden layers
-                Dense(128, activation="relu"),
-                # BatchNormalization(),
-                Dropout(0.3),
-                Dense(64, activation="relu"),
-                # BatchNormalization(),
-                Dropout(0.2),
-                # Output layer - 5 classes for our target values
-                # Output layer -1 for continous value between 0 and 1
-                Dense(1, activation="sigmoid"),
-            ]
-        )
-
-        # Use sparse categorical crossentropy since targets are integers
-        # optimizer = Adam(learning_rate=0.001)
-        model.compile(optimizer=optimizer, loss="mae", metrics=["mae"])
-
-        return model
-
     def export_model(self):
         """Simple model export"""
         model_path = os.path.join(self.output_path, "model.keras")
         self.model.save(model_path)
         print(f"Model saved to: {model_path}")
 
-    def _create_dataset_pipeline(self, data_path, is_training=True):
-        """Create an efficient TF dataset pipeline that processes data in batches"""
+    def generator(self):
+        parquet_file = pq.ParquetFile(data_path)
 
-        # Define dataset batch generator
-        def generator():
-            parquet_file = pq.ParquetFile(data_path)
+        # Use smaller read batches to reduce memory pressure
+        read_batch_size = min(10000, self.total_rows // 50)
 
-            # Use smaller read batches to reduce memory pressure
-            read_batch_size = min(10000, self.total_rows // 50)
+        for batch in parquet_file.iter_batches(batch_size=read_batch_size):
+            df_batch = batch.to_pandas()
 
-            for batch in parquet_file.iter_batches(batch_size=read_batch_size):
-                df_batch = batch.to_pandas()
+            # Extract features and target with explicit alignment
+            X_batch = df_batch[self.feature_cols].values
+            X_batch = np.ascontiguousarray(X_batch, dtype=np.float32)
 
-                # Extract features and target with explicit alignment
-                X_batch = df_batch[self.feature_cols].values
-                X_batch = np.ascontiguousarray(X_batch, dtype=np.float32)
+            # Convert target values to uint8 integers (0-4) with explicit alignment
+            # We keep the targert value in its original form
+            #
+            y_batch = df_batch[self.target_cols].values.squeeze()
+            y_batch = np.ascontiguousarray(y_batch, dtype=np.float32)
 
-                # Convert target values to uint8 integers (0-4) with explicit alignment
-                # We keep the targert value in its original form
-                #
-                y_batch = df_batch[self.target_cols].values.squeeze()
-                y_batch = np.ascontiguousarray(y_batch, dtype=np.float32)
-
-                # Map float values to integers
-                """
+            # Map float values to integers
+            """
                 for float_val, int_val in self.target_mapping.items():
                     y_batch[np.isclose(y_float, float_val)] = int_val
                 """
 
-                # Yield batches with explicit alignment
-                for i in range(0, len(X_batch), self.batch_size):
-                    end_idx = min(i + self.batch_size, len(X_batch))
-                    # Create properly aligned copies
-                    x = np.ascontiguousarray(X_batch[i:end_idx])
-                    y = np.ascontiguousarray(y_batch[i:end_idx])
-                    yield x, y
+            # Yield batches with explicit alignment
+            for i in range(0, len(X_batch), self.batch_size):
+                end_idx = min(i + self.batch_size, len(X_batch))
+                # Create properly aligned copies
+                x = np.ascontiguousarray(X_batch[i:end_idx])
+                y = np.ascontiguousarray(y_batch[i:end_idx])
+                yield x, y
 
-                # Free memory
-                del df_batch, X_batch, y_batch
-                gc.collect()
+            # Free memory
+            del df_batch, X_batch, y_batch
+            gc.collect()
 
-        # Define output shapes and types
+    def create_dataset_pipeline(self, data_path, is_training=True):
+        """Create an efficient TF dataset pipeline that processes data in batches"""
         output_signature = (
             tf.TensorSpec(shape=(None, self.feature_count), dtype=tf.float32),
             tf.TensorSpec(shape=(None,), dtype=tf.float32),
@@ -249,7 +204,7 @@ class ModelRunner:
 
         # Create dataset
         dataset = tf.data.Dataset.from_generator(
-            generator, output_signature=output_signature
+            self.generator, output_signature=output_signature
         )
 
         # Configure dataset for performance - reduce shuffle buffer size
@@ -264,37 +219,18 @@ class ModelRunner:
     def train(self, validation_split=0.1, epochs=5):
         """Train the model using memory-efficient batch processing"""
 
-        if self.data_path_train == None:
-            self._download_data()
-
-        # self._load_data()
-        self._get_dataset_info()
-
         # Create full dataset pipeline
         print("Creating dataset pipeline...")
-        full_dataset = self._create_dataset_pipeline(self.data_path_train)
-
-        # Calculate steps for validation data
+        self.train_dataset = self.create_dataset_pipeline(self.data_path_train)
 
         train_size = int(self.total_rows * (1 - validation_split))
-
-        steps_per_epoch = train_size // self.batch_size
 
         validation_steps = max(1, (self.total_rows - train_size) // self.batch_size)
 
         # Manually split the dataset
-        val_dataset = full_dataset.take(validation_steps)
+        val_dataset = self.train_dataset.take(validation_steps)
 
-        train_dataset = full_dataset.skip(validation_steps)
-
-        if self.external_model is not None:
-            print("Using provided external model...")
-            model = self.external_model
-        else:
-            print("No model provided, creating default model...")
-            model = self._create_default_model()
-
-        model.summary()
+        self.model.summary()
 
         # Callbacks for training
         callbacks = [
@@ -310,23 +246,20 @@ class ModelRunner:
         print(
             f"Training model for {epochs} epochs with batch size {self.batch_size}..."
         )
-        history = model.fit(
-            train_dataset,
+        history = self.model.fit(
+            self.train_dataset.skip(validation_steps),
             epochs=epochs,
-            steps_per_epoch=min(steps_per_epoch, 200),
+            steps_per_epoch=min(train_size // self.batch_size, 200),
             validation_data=val_dataset,
             validation_steps=min(validation_steps, 50),
             callbacks=callbacks,
             verbose=1,
         )
 
-        # Store model as instance variable
-        self.model = model
-
         # Simple export
         self.export_model()
 
-        return model, history
+        return self.model, history
 
     def predict(self, X):
         """Convert categorical predictions back to original float values"""
@@ -336,44 +269,33 @@ class ModelRunner:
         # Get raw predictions
         raw_preds = self.model.predict(X)
 
-        # Convert to class indices (0-4)
-        class_indices = np.argmax(raw_preds, axis=1)
-
-        # Map back to float values (0.0-1.0)
-        float_predictions = np.vectorize(self.inverse_target_mapping.get)(class_indices)
-
-        return float_predictions
+        return raw_preds
 
     def validate_model(self):
-        # Load the validation data and filter for data_type == "validation
-
-        # Load the validation data and filter for data_type == "validation"
-
-        validation = pd.read_parquet(
+        self.validation_dataset = pd.read_parquet(
             self.data_path_val,
             columns=["era", "data_type", "target"] + self._feature_set,
         )
-        validation = validation[validation["data_type"] == "validation"]
-        del validation["data_type"]
-
-        train = pd.read_parquet(
-            self.data_path_train, columns=["era", "target"] + self._feature_set
-        )
+        validation = self.validation_dataset
+        [self.validation_dataset["data_type"] == "validation"]
+        del self.validation_dataset["data_type"]
 
         # Downsample to every 4th era to reduce memory usage and speedup evaluation (suggested for Colab free tier)
-        # Comment out the line below to use all the data (slower and higher memory usage, but more accurate evaluation)
         validation = validation[validation["era"].isin(validation["era"].unique()[::4])]
 
-        # Eras are 1 week apart, but targets look 20 days (o 4 weeks/eras) into the future,
-        # so we need to "embargo" the first 4 eras following our last train era to avoid "data leakage"
-        last_train_era = int(train["era"].unique()[-1])
-        eras_to_embargo = [
-            str(era).zfill(4) for era in [last_train_era + i for i in range(4)]
+        validation = validation[
+            ~validation["era"].isin(
+                [
+                    str(era).zfill(4)
+                    for era in [
+                        int(self.train_dataset["era"].unique()[-1]) + i
+                        for i in range(4)
+                    ]
+                ]
+            )
         ]
-        validation = validation[~validation["era"].isin(eras_to_embargo)]
 
         # Generate predictions against the out-of-sample validation features
-        # This will take a few minutes 🍵
         validation["prediction"] = self.model.predict(
             validation[self._feature_set]
         ).squeeze()
