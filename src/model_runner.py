@@ -25,7 +25,6 @@ class ModelRunner:
         self,
         path_train: str = "data/train.parquet",
         path_val: str = "data/validation.parquet",
-        path_metadata: str = "data/features.json",
         path_meta_model: str = "data/meta_model.parquet",
         path_features: str = "data/features.json",
         output_path: str = "exports",
@@ -34,15 +33,15 @@ class ModelRunner:
         model=None,
     ):
         self.path_train = path_train
-        self.train_dataset = None
+        self.train_dataset = pq.ParquetFile(self.path_train)
         self.path_val = path_val
-        self.validation_dataset = None
-        self.path_metadata = path_metadata
+        self.validation_dataset = pq.ParquetFile(self.validation_dataset)
         self.path_meta_model = path_meta_model
+        self.meta_model = pq.ParquetFile(self.path_meta_model)
         self.path_features = path_features
-        self.feature_set = json.load(
-            open(self.path_features, "r", encoding="utf-8")
-        )["features"]
+        self.feature_set = json.load(open(self.path_features, "r", encoding="utf-8"))[
+            "features"
+        ]
         self.output_path = output_path
         self.batch_size = batch_size
         self.subset_features = subset_features
@@ -61,9 +60,7 @@ class ModelRunner:
         print("Available versions:\n", dataset_versions)
 
         # Print all files available for download for our version
-        current_version_files = [
-            f for f in all_datasets if f.startswith(data_version)
-        ]
+        current_version_files = [f for f in all_datasets if f.startswith(data_version)]
         print("Available", data_version, "files:\n", current_version_files)
 
         # download the feature metadata file
@@ -106,58 +103,8 @@ class ModelRunner:
         self.model.save(model_path)
         print(f"Model saved to: {model_path}")
 
-    @classmethod
-    def generator(cls, data_path):
-        parquet_file = pq.ParquetFile(data_path)
-
-        # Use smaller read batches to reduce memory pressure
-        read_batch_size = min(10000, self.total_rows // 50)
-
-        for batch in parquet_file.iter_batches(batch_size=read_batch_size):
-            df_batch = batch.to_pandas()
-
-            # Extract features and target with explicit alignment
-            X_batch = df_batch[self.feature_cols].values
-            X_batch = np.ascontiguousarray(X_batch, dtype=np.float32)
-
-            # Convert target values to uint8 integers (0-4) with explicit alignment
-            # We keep the targert value in its original form
-            #
-            y_batch = np.ascontiguousarray(df_batch[self.target_cols].values.squeeze(), dtype=np.float32)
-
-            # Yield batches with explicit alignment
-            for i in range(0, len(X_batch), self.batch_size):
-                end_idx = min(i + self.batch_size, len(X_batch))
-                # Create properly aligned copies
-                x = np.ascontiguousarray(X_batch[i:end_idx])
-                y = np.ascontiguousarray(df_batch["target"].values.squeeze(), dtype=np.float32[i:end_idx])
-                yield x, y
-
-            # Free memory
-            del df_batch, X_batch, y_batch
-            gc.collect()
-
-    def create_dataset_pipeline(self, data_path, is_training=True):
-        """Create an efficient TF dataset pipeline that processes data in batches"""
-        output_signature = (
-            tf.TensorSpec(shape=(None, self.feature_count), dtype=tf.float32),
-            tf.TensorSpec(shape=(None,), dtype=tf.float32),
-        )
-
-        # Create dataset
-        dataset = tf.data.Dataset.from_generator(
-            self.generator, output_signature=output_signature
-        ).prefetch(tf.data.AUTOTUNE)
-
-        if is_training:
-            # Use a smaller shuffle buffer to avoid memory issues
-            dataset = dataset.shuffle(buffer_size=1000)
-
-        return dataset
-
     def train(self, validation_split=0.1, epochs=5):
         """Train the model using memory-efficient batch processing"""
-        self.train_dataset = self.create_dataset_pipeline(self.data_path_train)
 
         train_size = int(self.total_rows * (1 - validation_split))
 
@@ -235,25 +182,18 @@ class ModelRunner:
         return validation
 
     def performance_eval(self):
-
         if self._validation is None:
             print("Please run validation before evaluating the performance!")
             return None
 
-        self._validation["meta_model"] = pd.read_parquet(self.data_path_meta_model)[
-            "numerai_meta_model"
-        ]
-
-        validation = self._validation
-
         # Compute the per-era corr between our predictions and the target values
-        per_era_corr = validation.groupby("era").apply(
+        per_era_corr = self.meta_model["meta_model"].groupby("era").apply(
             lambda x: numerai_corr(x[["prediction"]].dropna(), x["target"].dropna())
         )
 
         # Compute the per-era mmc between our predictions, the meta model, and the target values
         per_era_mmc = (
-            validation.dropna()
+            self.meta_model["meta_model"].dropna()
             .groupby("era")
             .apply(
                 lambda x: correlation_contribution(
