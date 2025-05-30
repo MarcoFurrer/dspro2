@@ -27,7 +27,6 @@ class ModelRunner:
         path_metadata: str = "data/features.json",
         path_meta_model: str = "data/meta_model.parquet",
         path_features: str = "data/features.json",
-        data_version: str = "v5.0",
         output_path: str = "exports",
         batch_size: int = 64,
         subset_features: Literal["small", "medium", "all"] = "small",
@@ -40,50 +39,33 @@ class ModelRunner:
         self.path_metadata = path_metadata
         self.path_meta_model = path_meta_model
         self.path_features = path_features
-        self.data_version = data_version
         self.output_path = output_path
         self.batch_size = batch_size
         self.subset_features = subset_features
         self.feature_count = None
-        self.n_categories = 5  # Categories 0-4
-        self.model = model  # Store the external model if provided
-        os.makedirs(output_path, exist_ok=True)
+        self.model = model
         self.feature_set = None
         self.target_set = None
-        self.target_mapping = {
-            0.0: 0,
-            0.25: 1,
-            0.5: 2,
-            0.75: 3,
-            1.0: 4,
-        }  # Map float targets to integers
-        self.inverse_target_mapping = {
-            0: 0.0,
-            1: 0.25,
-            2: 0.5,
-            3: 0.75,
-            4: 1.0,
-        }  # For converting back
         self._validation = None
 
-    def download_data(self):
+        os.makedirs(output_path, exist_ok=True)
+
+    @classmethod
+    def download_data(cls, data_version="v5.0"):
         # list the datasets and available versions
         all_datasets = napi.list_datasets()
         dataset_versions = list(set(d.split("/")[0] for d in all_datasets))
         print("Available versions:\n", dataset_versions)
 
-        # Maybe add this as parameter later to change versions
-        # Set data version to one of the latest datasets
-
         # Print all files available for download for our version
         current_version_files = [
-            f for f in all_datasets if f.startswith(self.data_version)
+            f for f in all_datasets if f.startswith(data_version)
         ]
-        print("Available", self.data_version, "files:\n", current_version_files)
+        print("Available", data_version, "files:\n", current_version_files)
 
         # download the feature metadata file
-        napi.download_dataset(f"{self.data_version}/features.json")
-        napi.download_dataset(f"{self.data_version}/validation.parquet")
+        napi.download_dataset(f"{data_version}/features.json")
+        napi.download_dataset(f"{data_version}/validation.parquet")
 
     def plot_data(self):
         # Plot the number of rows per era
