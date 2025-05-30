@@ -17,6 +17,7 @@ from numerapi import NumerAPI as napi
 from numerai_tools.scoring import numerai_corr, correlation_contribution
 from config import *
 from typing import Literal
+import json
 
 
 class ModelRunner:
@@ -39,12 +40,14 @@ class ModelRunner:
         self.path_metadata = path_metadata
         self.path_meta_model = path_meta_model
         self.path_features = path_features
+        self.feature_set = json.load(
+            open(self.path_features, "r", encoding="utf-8")
+        )["features"]
         self.output_path = output_path
         self.batch_size = batch_size
         self.subset_features = subset_features
         self.feature_count = None
         self.model = model
-        self.feature_set = None
         self.target_set = None
         self._validation = None
 
@@ -90,10 +93,10 @@ class ModelRunner:
         last_era = self.train_dataset[
             self.train_dataset["era"] == self.train_dataset["era"].unique()[-1]
         ]
-        last_era[feature_set[-1]].plot(
+        last_era[self.feature_set[-1]].plot(
             title="5 equal bins", kind="hist", density=True, bins=50, ax=ax1
         )
-        first_era[feature_set[-1]].plot(
+        first_era[self.feature_set[-1]].plot(
             title="missing data", kind="hist", density=True, bins=50, ax=ax2
         )
 
