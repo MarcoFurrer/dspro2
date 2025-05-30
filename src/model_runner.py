@@ -95,29 +95,34 @@ class ModelRunner:
     def train(self, validation_split=0.1, epochs=5):
         """Train the model using memory-efficient batch processing"""
 
-        X = self.train_dataset[self.feature_set["feature_sets"][self.subset_features]].values
+        X = self.train_dataset[
+            self.feature_set["feature_sets"][self.subset_features]
+        ].values
         y = self.train_dataset["target"].values.astype(np.float32)
-        
+
         # Calculate split indices
         total_samples = len(X)
         val_samples = int(total_samples * validation_split)
         train_samples = total_samples - val_samples
-        
+
         # Split data
         X_train = X[:train_samples]
         y_train = y[:train_samples]
         X_val = X[train_samples:]
         y_val = y[train_samples:]
-        
+
         print(f"Training samples: {len(X_train):,}")
         print(f"Validation samples: {len(X_val):,}")
-        
+
         self.model.summary()
-    
+
         # Train the model
-        print(f"Training model for {epochs} epochs with batch size {self.batch_size}...")
+        print(
+            f"Training model for {epochs} epochs with batch size {self.batch_size}..."
+        )
         history = self.model.fit(
-            X_train, y_train,
+            X_train,
+            y_train,
             validation_data=(X_val, y_val),
             epochs=epochs,
             batch_size=self.batch_size,
@@ -131,13 +136,13 @@ class ModelRunner:
             ],
             verbose=1,
         )
-        
+
         # Clean up memory
         del X, y, X_train, y_train, X_val, y_val
-        
+
         # Export model
         self.export_model()
-        
+
         return self.model, history
 
     def predict(self, X):
@@ -151,35 +156,36 @@ class ModelRunner:
         return raw_preds
 
     def validate_model(self):
-        self.validation_dataset = pd.read_parquet(
-            self.data_path_val,
-            columns=["era", "data_type", "target"] + self._feature_set,
-        )
-        validation = self.validation_dataset
-        [self.validation_dataset["data_type"] == "validation"]
-        del self.validation_dataset["data_type"]
+        """Validate the model on validation dataset"""
 
-        # Downsample to every 4th era to reduce memory usage and speedup evaluation (suggested for Colab free tier)
-        validation = validation[validation["era"].isin(validation["era"].unique()[::4])]
+        print("Preparing validation data...")
 
+        # Use existing validation_dataset - filter for validation data type
+        validation = self.validation_dataset[
+            self.validation_dataset["data_type"] == "validation"
+        ]
+
+        # Downsample to every 4th era
+        unique_eras = validation["era"].unique()
+        validation = validation[validation["era"].isin(unique_eras[::4])]
+        print(f"Using {len(unique_eras[::4])} eras for validation")
+
+        # Get last training era and embargo
+        last_train_era = int(self.train_dataset["era"].max())
         validation = validation[
             ~validation["era"].isin(
                 [
                     str(era).zfill(4)
-                    for era in [
-                        int(self.train_dataset["era"].unique()[-1]) + i
-                        for i in range(4)
-                    ]
+                    for era in range(last_train_era + 1, last_train_era + 5)
                 ]
             )
         ]
 
-        # Generate predictions against the out-of-sample validation features
-        validation["prediction"] = self.model.predict(
-            validation[self._feature_set]
-        ).squeeze()
-
-        self._validation = validation
+        print(f"Final validation samples: {len(validation):,}")
+        X_val = validation[
+            self.feature_set["feature_sets"][self.subset_features]
+        ].values.astype(np.float32)
+        validation["prediction"] = self.model.predict(X_val, verbose=1).squeeze()
 
         return validation
 
@@ -189,13 +195,18 @@ class ModelRunner:
             return None
 
         # Compute the per-era corr between our predictions and the target values
-        per_era_corr = self.meta_model["meta_model"].groupby("era").apply(
-            lambda x: numerai_corr(x[["prediction"]].dropna(), x["target"].dropna())
+        per_era_corr = (
+            self.meta_model["meta_model"]
+            .groupby("era")
+            .apply(
+                lambda x: numerai_corr(x[["prediction"]].dropna(), x["target"].dropna())
+            )
         )
 
         # Compute the per-era mmc between our predictions, the meta model, and the target values
         per_era_mmc = (
-            self.meta_model["meta_model"].dropna()
+            self.meta_model["meta_model"]
+            .dropna()
             .groupby("era")
             .apply(
                 lambda x: correlation_contribution(
