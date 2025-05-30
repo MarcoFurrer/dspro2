@@ -5,6 +5,7 @@ DATA_PATH = "data/train.parquet"
 VAL_PATH = "data/validation.parquet"
 META_PATH = "data/features.json"
 META_MODEL = "data/meta_model.parquet"
+DATA_VERSION = "v1.0"
 
 # Model parameters
 DEFAULT_BATCH_SIZE = 64
