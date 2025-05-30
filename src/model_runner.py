@@ -1,21 +1,12 @@
 import os
 import json
 import matplotlib.pyplot as plt
-import cloudpickle
 import pyarrow.parquet as pq
-
-import tensorflow as tf
 import pandas as pd
 import numpy as np
-import gc
-from keras.models import Sequential
-from keras.layers import Dense, Dropout, Input
 from keras.callbacks import EarlyStopping, ReduceLROnPlateau
-from keras.optimizers import Adam
-
 from numerapi import NumerAPI as napi
 from numerai_tools.scoring import numerai_corr, correlation_contribution
-from config import *
 from typing import Literal
 import json
 
@@ -33,15 +24,13 @@ class ModelRunner:
         model=None,
     ):
         self.path_train = path_train
-        self.train_dataset = pq.ParquetFile(self.path_train)
+        self.train_dataset = pd.read_parquet(self.path_train)
         self.path_val = path_val
-        self.validation_dataset = pq.ParquetFile(self.validation_dataset)
+        self.validation_dataset = pd.read_parquet(self.path_val)
         self.path_meta_model = path_meta_model
-        self.meta_model = pq.ParquetFile(self.path_meta_model)
+        self.meta_model = pd.read_parquet(self.path_meta_model)
         self.path_features = path_features
-        self.feature_set = json.load(open(self.path_features, "r", encoding="utf-8"))[
-            "features"
-        ]
+        self.feature_set = json.load(open(self.path_features, "r", encoding="utf-8"))
         self.output_path = output_path
         self.batch_size = batch_size
         self.subset_features = subset_features
@@ -106,22 +95,32 @@ class ModelRunner:
     def train(self, validation_split=0.1, epochs=5):
         """Train the model using memory-efficient batch processing"""
 
-        train_size = int(self.total_rows * (1 - validation_split))
-
-        validation_steps = max(1, (self.total_rows - train_size) // self.batch_size)
-
+        X = self.train_dataset[self.feature_set["feature_sets"][self.subset_features]].values
+        y = self.train_dataset["target"].values.astype(np.float32)
+        
+        # Calculate split indices
+        total_samples = len(X)
+        val_samples = int(total_samples * validation_split)
+        train_samples = total_samples - val_samples
+        
+        # Split data
+        X_train = X[:train_samples]
+        y_train = y[:train_samples]
+        X_val = X[train_samples:]
+        y_val = y[train_samples:]
+        
+        print(f"Training samples: {len(X_train):,}")
+        print(f"Validation samples: {len(X_val):,}")
+        
         self.model.summary()
-
-        # Train with reduced steps to avoid memory issues
-        print(
-            f"Training model for {epochs} epochs with batch size {self.batch_size}..."
-        )
+    
+        # Train the model
+        print(f"Training model for {epochs} epochs with batch size {self.batch_size}...")
         history = self.model.fit(
-            self.train_dataset.skip(validation_steps),
+            X_train, y_train,
+            validation_data=(X_val, y_val),
             epochs=epochs,
-            steps_per_epoch=min(train_size // self.batch_size, 200),
-            validation_data=self.train_dataset.take(validation_steps),
-            validation_steps=min(validation_steps, 50),
+            batch_size=self.batch_size,
             callbacks=[
                 EarlyStopping(
                     monitor="val_loss", patience=3, restore_best_weights=True, verbose=1
@@ -132,10 +131,13 @@ class ModelRunner:
             ],
             verbose=1,
         )
-
-        # Simple export
+        
+        # Clean up memory
+        del X, y, X_train, y_train, X_val, y_val
+        
+        # Export model
         self.export_model()
-
+        
         return self.model, history
 
     def predict(self, X):
