@@ -34,7 +34,9 @@ class ModelRunner:
         model=None,
     ):
         self.path_train = path_train
+        self.train_dataset = None
         self.path_val = path_val
+        self.validation_dataset = None
         self.path_metadata = path_metadata
         self.path_meta_model = path_meta_model
         self.path_features = path_features
@@ -63,10 +65,8 @@ class ModelRunner:
             4: 1.0,
         }  # For converting back
         self._validation = None
-        self.train_dataset = None
-        self.validation_dataset = None
 
-    def _download_data(self):
+    def download_data(self):
         # list the datasets and available versions
         all_datasets = napi.list_datasets()
         dataset_versions = list(set(d.split("/")[0] for d in all_datasets))
@@ -74,66 +74,25 @@ class ModelRunner:
 
         # Maybe add this as parameter later to change versions
         # Set data version to one of the latest datasets
-        DATA_VERSION = "v5.0"
 
         # Print all files available for download for our version
-        current_version_files = [f for f in all_datasets if f.startswith(DATA_VERSION)]
-        print("Available", DATA_VERSION, "files:\n", current_version_files)
+        current_version_files = [
+            f for f in all_datasets if f.startswith(self.data_version)
+        ]
+        print("Available", self.data_version, "files:\n", current_version_files)
 
         # download the feature metadata file
-        napi.download_dataset(f"{DATA_VERSION}/features.json")
-        napi.download_dataset(f"{DATA_VERSION}/validation.parquet")
-
-        self.data_path_train = f"{DATA_VERSION}/features.json"
-        self.data_path_val = f"{DATA_VERSION}/validation.parquet"
-
-    def _get_dataset_info(self):
-        """Get basic information about the dataset"""
-        # read the metadata and display
-        feature_metadata = json.load(open(self.data_path_metadata))
-        for metadata in feature_metadata:
-            print(metadata, len(feature_metadata[metadata]))
-
-        feature_sets = feature_metadata["feature_sets"]
-        for feature_set in ["small", "medium", "all"]:
-            print(feature_set, len(feature_sets[feature_set]))
-
-        feature_set = feature_sets[self._subset_features]
-        self._feature_set = feature_set
-
-        # Open the parquet file
-        parquet_file = pq.ParquetFile(self.data_path_train)
-
-        # Read only the first row group for a quick sample
-        df_sample = pd.read_parquet(
-            self.data_path_train, columns=["era", "target"] + self._feature_set
-        )
-
-        df_sample = df_sample.head(1)
-        # Identify feature and target columns
-        feature_cols = [col for col in df_sample.columns if col.startswith("feature_")]
-        target_cols = [col for col in df_sample.columns if col.startswith("target")]
-
-        total_rows = parquet_file.metadata.num_rows
-
-        self.feature_cols = feature_cols
-        self.target_cols = target_cols
-        self.feature_count = len(feature_cols)
-        self.total_rows = total_rows
-
-        print(f"Dataset has {total_rows:,} rows")
-        print(
-            f"Found {self.feature_count} feature columns and {len(target_cols)} target columns"
-        )
+        napi.download_dataset(f"{self.data_version}/features.json")
+        napi.download_dataset(f"{self.data_version}/validation.parquet")
 
     def plot_data(self):
         # Plot the number of rows per era
-        self._train.groupby("era").size().plot(
+        self.train_dataset.groupby("era").size().plot(
             title="Number of rows per era", figsize=(5, 3), xlabel="Era"
         )
 
         # Plot density histogram of the target
-        train["target"].plot(
+        self.train_dataset["target"].plot(
             kind="hist",
             title="Target",
             figsize=(5, 3),
@@ -143,8 +102,12 @@ class ModelRunner:
         )
 
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 3))
-        first_era = train[train["era"] == train["era"].unique()[0]]
-        last_era = train[train["era"] == train["era"].unique()[-1]]
+        first_era = self.train_dataset[
+            self.train_dataset["era"] == self.train_dataset["era"].unique()[0]
+        ]
+        last_era = self.train_dataset[
+            self.train_dataset["era"] == self.train_dataset["era"].unique()[-1]
+        ]
         last_era[feature_set[-1]].plot(
             title="5 equal bins", kind="hist", density=True, bins=50, ax=ax1
         )
@@ -158,7 +121,8 @@ class ModelRunner:
         self.model.save(model_path)
         print(f"Model saved to: {model_path}")
 
-    def generator(self):
+    @classmethod
+    def generator(cls, data_path):
         parquet_file = pq.ParquetFile(data_path)
 
         # Use smaller read batches to reduce memory pressure
@@ -176,12 +140,6 @@ class ModelRunner:
             #
             y_batch = df_batch[self.target_cols].values.squeeze()
             y_batch = np.ascontiguousarray(y_batch, dtype=np.float32)
-
-            # Map float values to integers
-            """
-                for float_val, int_val in self.target_mapping.items():
-                    y_batch[np.isclose(y_float, float_val)] = int_val
-                """
 
             # Yield batches with explicit alignment
             for i in range(0, len(X_batch), self.batch_size):
@@ -205,10 +163,7 @@ class ModelRunner:
         # Create dataset
         dataset = tf.data.Dataset.from_generator(
             self.generator, output_signature=output_signature
-        )
-
-        # Configure dataset for performance - reduce shuffle buffer size
-        dataset = dataset.prefetch(tf.data.AUTOTUNE)
+        ).prefetch(tf.data.AUTOTUNE)
 
         if is_training:
             # Use a smaller shuffle buffer to avoid memory issues
@@ -218,29 +173,13 @@ class ModelRunner:
 
     def train(self, validation_split=0.1, epochs=5):
         """Train the model using memory-efficient batch processing"""
-
-        # Create full dataset pipeline
-        print("Creating dataset pipeline...")
         self.train_dataset = self.create_dataset_pipeline(self.data_path_train)
 
         train_size = int(self.total_rows * (1 - validation_split))
 
         validation_steps = max(1, (self.total_rows - train_size) // self.batch_size)
 
-        # Manually split the dataset
-        val_dataset = self.train_dataset.take(validation_steps)
-
         self.model.summary()
-
-        # Callbacks for training
-        callbacks = [
-            EarlyStopping(
-                monitor="val_loss", patience=3, restore_best_weights=True, verbose=1
-            ),
-            ReduceLROnPlateau(
-                monitor="val_loss", factor=0.5, patience=2, min_lr=0.0001, verbose=1
-            ),
-        ]
 
         # Train with reduced steps to avoid memory issues
         print(
@@ -250,9 +189,16 @@ class ModelRunner:
             self.train_dataset.skip(validation_steps),
             epochs=epochs,
             steps_per_epoch=min(train_size // self.batch_size, 200),
-            validation_data=val_dataset,
+            validation_data=self.train_dataset.take(validation_steps),
             validation_steps=min(validation_steps, 50),
-            callbacks=callbacks,
+            callbacks=[
+                EarlyStopping(
+                    monitor="val_loss", patience=3, restore_best_weights=True, verbose=1
+                ),
+                ReduceLROnPlateau(
+                    monitor="val_loss", factor=0.5, patience=2, min_lr=0.0001, verbose=1
+                ),
+            ],
             verbose=1,
         )
 
@@ -364,24 +310,25 @@ class ModelRunner:
         # Compute performance metrics
         corr_mean = per_era_corr.mean()
         corr_std = per_era_corr.std(ddof=0)
-        corr_sharpe = corr_mean / corr_std
-        corr_max_drawdown = (
-            per_era_corr.cumsum().expanding(min_periods=1).max() - per_era_corr.cumsum()
-        ).max()
 
         mmc_mean = per_era_mmc.mean()
         mmc_std = per_era_mmc.std(ddof=0)
-        mmc_sharpe = mmc_mean / mmc_std
-        mmc_max_drawdown = (
-            per_era_mmc.cumsum().expanding(min_periods=1).max() - per_era_mmc.cumsum()
-        ).max()
 
         pd.DataFrame(
             {
                 "mean": [corr_mean, mmc_mean],
                 "std": [corr_std, mmc_std],
-                "sharpe": [corr_sharpe, mmc_sharpe],
-                "max_drawdown": [corr_max_drawdown, mmc_max_drawdown],
+                "sharpe": [corr_mean / corr_std, mmc_mean / mmc_std],
+                "max_drawdown": [
+                    (
+                        per_era_corr.cumsum().expanding(min_periods=1).max()
+                        - per_era_corr.cumsum()
+                    ).max(),
+                    (
+                        per_era_mmc.cumsum().expanding(min_periods=1).max()
+                        - per_era_mmc.cumsum()
+                    ).max(),
+                ],
             },
             index=["CORR", "MMC"],
         ).T
