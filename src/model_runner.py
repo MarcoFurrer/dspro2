@@ -123,15 +123,14 @@ class ModelRunner:
             # Convert target values to uint8 integers (0-4) with explicit alignment
             # We keep the targert value in its original form
             #
-            y_batch = df_batch[self.target_cols].values.squeeze()
-            y_batch = np.ascontiguousarray(y_batch, dtype=np.float32)
+            y_batch = np.ascontiguousarray(df_batch[self.target_cols].values.squeeze(), dtype=np.float32)
 
             # Yield batches with explicit alignment
             for i in range(0, len(X_batch), self.batch_size):
                 end_idx = min(i + self.batch_size, len(X_batch))
                 # Create properly aligned copies
                 x = np.ascontiguousarray(X_batch[i:end_idx])
-                y = np.ascontiguousarray(y_batch[i:end_idx])
+                y = np.ascontiguousarray(df_batch["target"].values.squeeze(), dtype=np.float32[i:end_idx])
                 yield x, y
 
             # Free memory
@@ -295,7 +294,6 @@ class ModelRunner:
         # Compute performance metrics
         corr_mean = per_era_corr.mean()
         corr_std = per_era_corr.std(ddof=0)
-
         mmc_mean = per_era_mmc.mean()
         mmc_std = per_era_mmc.std(ddof=0)
 
