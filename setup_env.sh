@@ -5,6 +5,7 @@ ENV_NAME=numerai-env
 # Create the conda environment
 conda env create -f environment.yml
 
+conda init $ENV_NAME
 # Activate it
 conda activate $ENV_NAME
 
