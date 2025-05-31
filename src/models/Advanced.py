@@ -25,5 +25,5 @@ model = Sequential([
             Dense(5, activation='softmax'),
             Dense(5, activation='softmax'),
             
-            Dense(5, activation='softmax')
+            Dense(1, activation='softmax')
         ], name="Advanced")

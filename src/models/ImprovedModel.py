@@ -138,7 +138,7 @@ def build_model():
     
     # Output layer with regularization
     outputs = Dense(
-        5, 
+        1, 
         activation='softmax',
         kernel_regularizer=l1_l2(l1=1e-6, l2=1e-5)
     )(x)

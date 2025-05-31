@@ -19,5 +19,5 @@ model = Sequential([
     Dropout(0.3),
     
     # Output layer
-    Dense(5, activation='softmax')
+    Dense(1, activation='softmax')
 ], name="Wide")
