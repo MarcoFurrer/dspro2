@@ -7,3 +7,4 @@ data/*
 *.keras
 notebooks/gradient_models/lgbm_regressor_model.pkl
 /__pycache__/
+*.pyc
