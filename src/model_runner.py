@@ -146,14 +146,14 @@ class ModelRunner:
         return self.model, history
 
     def predict(self, X):
-        """Convert categorical predictions back to original float values"""
-        # Ensure proper alignment
-        X = np.ascontiguousarray(X, dtype=np.uint8)
+        """Generate continuous predictions for regression"""
+        # Ensure proper data type for continuous features
+        X = np.ascontiguousarray(X, dtype=np.float32)
 
         # Get raw predictions
         raw_preds = self.model.predict(X)
 
-        return raw_preds
+        return raw_preds.squeeze()
 
     def validate_model(self):
         """Validate the model on validation dataset"""
