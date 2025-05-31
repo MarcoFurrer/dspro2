@@ -1,16 +1,11 @@
 #!/bin/bash
 
-ENV_NAME=numerai-env
+python3 -m venv .venv
 
-# Create the conda environment
-conda env create -f environment.yml
-
-conda init $ENV_NAME
-# Activate it
-conda activate $ENV_NAME
-
-# Install ipykernel (if not already installed)
-conda install ipykernel -y
+source .venv/bin/activate
 
 # Add the kernel so it shows up in Jupyter
-python -m ipykernel install --user --name=$ENV_NAME --display-name "Python ($ENV_NAME)"
+python -m ipykernel install --user --name=$ENV_NAME --display-name "Python (.venv)"
+
+pip install -r requirements.txt
+

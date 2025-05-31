@@ -3,6 +3,5 @@ channels:
   - conda-forge
 dependencies:
   - python=3.9.6
-    - pip:
-      - -r requirements.txt
+    - pip
 prefix: /opt/conda/envs/numerai-env
