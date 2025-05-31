@@ -19,7 +19,7 @@ class ModelRunner:
         path_meta_model: str = "data/meta_model.parquet",
         path_features: str = "data/features.json",
         output_path: str = "exports",
-        batch_size: int = 64,
+        batch_size: int = 32,
         subset_features: Literal["small", "medium", "all"] = "small",
         model=None,
     ):
