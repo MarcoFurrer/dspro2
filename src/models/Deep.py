@@ -102,7 +102,7 @@ x = BatchNormalization()(x)
 x = Dropout(0.1)(x)
 
 # Output layer
-outputs = Dense(5, activation='softmax')(x)
+outputs = Dense(1, activation='softmax')(x)
 
 # Create the model
 model = Model(inputs=inputs, outputs=outputs)
