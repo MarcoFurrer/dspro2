@@ -44,8 +44,8 @@ def main():
     # Compile model
     model.compile(
         optimizer=optimizer,
-        loss='sparse_categorical_crossentropy',
-        metrics=['accuracy']
+        loss='mae',
+        metrics=['mae']
     )
     
     # Create model runner
