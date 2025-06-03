@@ -98,7 +98,7 @@ class ModelRunner:
         X = self.train_dataset[
             self.feature_set["feature_sets"][self.subset_features]
         ].values
-        y = self.train_dataset["target"].values.astype(np.float32)
+        y = self.train_dataset["target"].values.astype(np.float16)
 
         # Calculate split indices
         total_samples = len(X)
@@ -148,7 +148,7 @@ class ModelRunner:
     def predict(self, X):
         """Generate continuous predictions for regression"""
         # Ensure proper data type for continuous features
-        X = np.ascontiguousarray(X, dtype=np.float32)
+        X = np.ascontiguousarray(X, dtype=np.float16)
 
         # Get raw predictions
         raw_preds = self.model.predict(X)
@@ -184,7 +184,7 @@ class ModelRunner:
         print(f"Final validation samples: {len(validation):,}")
         X_val = validation[
             self.feature_set["feature_sets"][self.subset_features]
-        ].values.astype(np.float32)
+        ].values.astype(np.float16)
         validation["prediction"] = self.model.predict(X_val, verbose=1).squeeze()
 
         return validation
