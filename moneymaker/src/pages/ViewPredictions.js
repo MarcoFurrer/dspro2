@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 const ViewPredictions = () => {
+  const navigate = useNavigate();
   const [predictions, setPredictions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
@@ -19,7 +21,9 @@ const ViewPredictions = () => {
           timestamp: '2025-06-06 10:30:00',
           model_id: 'Advanced_v1',
           error: 0.0367,
-          accuracy: 95.89
+          std_deviation: 0.0123,
+          confidence_interval: '0.8411 - 0.8657',
+          prediction_batch: 'Batch_001'
         },
         {
           id: 2,
@@ -28,7 +32,9 @@ const ViewPredictions = () => {
           timestamp: '2025-06-06 10:31:00',
           model_id: 'Advanced_v1',
           error: -0.0233,
-          accuracy: 96.77
+          std_deviation: 0.0098,
+          confidence_interval: '0.7136 - 0.7332',
+          prediction_batch: 'Batch_001'
         },
         {
           id: 3,
@@ -37,7 +43,9 @@ const ViewPredictions = () => {
           timestamp: '2025-06-06 10:32:00',
           model_id: 'LSTM_v2',
           error: 0.0111,
-          accuracy: 98.79
+          std_deviation: 0.0076,
+          confidence_interval: '0.9047 - 0.9199',
+          prediction_batch: 'Batch_002'
         },
         {
           id: 4,
@@ -46,7 +54,9 @@ const ViewPredictions = () => {
           timestamp: '2025-06-06 10:33:00',
           model_id: 'CNN_v1',
           error: -0.0246,
-          accuracy: 96.37
+          std_deviation: 0.0145,
+          confidence_interval: '0.6644 - 0.6934',
+          prediction_batch: 'Batch_003'
         },
         {
           id: 5,
@@ -55,7 +65,9 @@ const ViewPredictions = () => {
           timestamp: '2025-06-06 10:34:00',
           model_id: 'Advanced_v1',
           error: -0.0025,
-          accuracy: 99.72
+          std_deviation: 0.0034,
+          confidence_interval: '0.8867 - 0.8935',
+          prediction_batch: 'Batch_001'
         },
         {
           id: 6,
@@ -64,7 +76,9 @@ const ViewPredictions = () => {
           timestamp: '2025-06-06 10:35:00',
           model_id: 'LSTM_v2',
           error: 0.0246,
-          accuracy: 95.67
+          std_deviation: 0.0189,
+          confidence_interval: '0.5243 - 0.5621',
+          prediction_batch: 'Batch_002'
         },
         {
           id: 7,
@@ -73,7 +87,9 @@ const ViewPredictions = () => {
           timestamp: '2025-06-06 10:36:00',
           model_id: 'CNN_v1',
           error: -0.0236,
-          accuracy: 97.01
+          std_deviation: 0.0112,
+          confidence_interval: '0.7778 - 0.8002',
+          prediction_batch: 'Batch_003'
         },
         {
           id: 8,
@@ -82,7 +98,9 @@ const ViewPredictions = () => {
           timestamp: '2025-06-06 10:37:00',
           model_id: 'Advanced_v1',
           error: 0.0045,
-          accuracy: 99.53
+          std_deviation: 0.0067,
+          confidence_interval: '0.9389 - 0.9523',
+          prediction_batch: 'Batch_004'
         },
         {
           id: 9,
@@ -91,7 +109,9 @@ const ViewPredictions = () => {
           timestamp: '2025-06-06 10:38:00',
           model_id: 'LSTM_v2',
           error: 0.0246,
-          accuracy: 92.88
+          std_deviation: 0.0234,
+          confidence_interval: '0.2976 - 0.3444',
+          prediction_batch: 'Batch_002'
         },
         {
           id: 10,
@@ -100,7 +120,9 @@ const ViewPredictions = () => {
           timestamp: '2025-06-06 10:39:00',
           model_id: 'CNN_v1',
           error: -0.0222,
-          accuracy: 97.47
+          std_deviation: 0.0156,
+          confidence_interval: '0.8609 - 0.8921',
+          prediction_batch: 'Batch_003'
         },
         {
           id: 11,
@@ -109,7 +131,9 @@ const ViewPredictions = () => {
           timestamp: '2025-06-06 10:40:00',
           model_id: 'Advanced_v1',
           error: 0.0246,
-          accuracy: 96.38
+          std_deviation: 0.0087,
+          confidence_interval: '0.6456 - 0.6630',
+          prediction_batch: 'Batch_004'
         },
         {
           id: 12,
@@ -118,7 +142,9 @@ const ViewPredictions = () => {
           timestamp: '2025-06-06 10:41:00',
           model_id: 'LSTM_v2',
           error: 0.0246,
-          accuracy: 94.61
+          std_deviation: 0.0198,
+          confidence_interval: '0.4123 - 0.4519',
+          prediction_batch: 'Batch_005'
         }
       ]);
       setLoading(false);
@@ -174,9 +200,9 @@ const ViewPredictions = () => {
     return ' ↕';
   };
 
-  const getAccuracyColor = (accuracy) => {
-    if (accuracy >= 98) return '#28a745';
-    if (accuracy >= 95) return '#ffc107';
+  const getStdDeviationColor = (stdDev) => {
+    if (stdDev <= 0.01) return '#28a745';
+    if (stdDev <= 0.02) return '#ffc107';
     return '#dc3545';
   };
 
@@ -192,8 +218,18 @@ const ViewPredictions = () => {
     <div className="page-container">
       <h1 className="page-title">View Predictions</h1>
       <p className="page-subtitle">
-        Analyze and compare model predictions with actual values
+        Analyze and compare model predictions with statistical metrics
       </p>
+
+      <div className="mb-3 text-center">
+        <button
+          onClick={() => navigate('/make-prediction')}
+          className="btn btn-primary"
+          style={{ marginBottom: '1rem' }}
+        >
+          🔮 Make New Prediction
+        </button>
+      </div>
 
       <div className="mb-3" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
@@ -254,10 +290,22 @@ const ViewPredictions = () => {
                 Error{getSortIcon('error')}
               </th>
               <th 
-                onClick={() => handleSort('accuracy')}
+                onClick={() => handleSort('std_deviation')}
                 style={{ cursor: 'pointer' }}
               >
-                Accuracy{getSortIcon('accuracy')}
+                Std Deviation{getSortIcon('std_deviation')}
+              </th>
+              <th 
+                onClick={() => handleSort('confidence_interval')}
+                style={{ cursor: 'pointer' }}
+              >
+                Confidence Interval{getSortIcon('confidence_interval')}
+              </th>
+              <th 
+                onClick={() => handleSort('prediction_batch')}
+                style={{ cursor: 'pointer' }}
+              >
+                Batch{getSortIcon('prediction_batch')}
               </th>
               <th 
                 onClick={() => handleSort('timestamp')}
@@ -285,10 +333,21 @@ const ViewPredictions = () => {
                   {prediction.error >= 0 ? '+' : ''}{prediction.error.toFixed(4)}
                 </td>
                 <td style={{ 
-                  color: getAccuracyColor(prediction.accuracy),
+                  color: getStdDeviationColor(prediction.std_deviation),
                   fontWeight: 'bold'
                 }}>
-                  {prediction.accuracy.toFixed(2)}%
+                  {prediction.std_deviation.toFixed(4)}
+                </td>
+                <td style={{ 
+                  color: '#667eea',
+                  fontSize: '0.9rem'
+                }}>
+                  {prediction.confidence_interval}
+                </td>
+                <td>
+                  <span className="status-badge status-warning">
+                    {prediction.prediction_batch}
+                  </span>
                 </td>
                 <td>{prediction.timestamp}</td>
               </tr>

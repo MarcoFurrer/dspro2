@@ -14,8 +14,8 @@ const Home = () => {
           name: 'Advanced Neural Network v1',
           optimizer: 'Adam',
           performanceScore: 0.8947,
-          accuracy: '89.47%',
-          loss: 0.2156,
+          rmse: 0.2156,
+          mae: 0.1834,
           createdAt: '2024-01-15',
           status: 'trained'
         },
@@ -24,8 +24,8 @@ const Home = () => {
           name: 'Deep Learning Model v2',
           optimizer: 'RMSprop',
           performanceScore: 0.9123,
-          accuracy: '91.23%',
-          loss: 0.1834,
+          rmse: 0.1834,
+          mae: 0.1456,
           createdAt: '2024-01-20',
           status: 'trained'
         },
@@ -34,8 +34,8 @@ const Home = () => {
           name: 'CNN Classifier',
           optimizer: 'SGD',
           performanceScore: 0.8756,
-          accuracy: '87.56%',
-          loss: 0.2401,
+          rmse: 0.2401,
+          mae: 0.1923,
           createdAt: '2024-01-22',
           status: 'training'
         },
@@ -44,8 +44,8 @@ const Home = () => {
           name: 'LSTM Time Series',
           optimizer: 'Adam',
           performanceScore: 0.9345,
-          accuracy: '93.45%',
-          loss: 0.1567,
+          rmse: 0.1567,
+          mae: 0.1234,
           createdAt: '2024-01-25',
           status: 'trained'
         }
@@ -100,8 +100,8 @@ const Home = () => {
             </div>
             <div className="card-details">
               <p><strong>Optimizer:</strong> {model.optimizer}</p>
-              <p><strong>Accuracy:</strong> {model.accuracy}</p>
-              <p><strong>Loss:</strong> {model.loss.toFixed(4)}</p>
+              <p><strong>RMSE:</strong> {model.rmse.toFixed(4)}</p>
+              <p><strong>MAE:</strong> {model.mae.toFixed(4)}</p>
               <p><strong>Created:</strong> {model.createdAt}</p>
               <div className="mt-2">
                 {getStatusBadge(model.status)}

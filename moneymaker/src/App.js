@@ -5,6 +5,7 @@ import Home from './pages/Home';
 import ModelCreation from './pages/ModelCreation';
 import ImportPredictions from './pages/ImportPredictions';
 import ViewPredictions from './pages/ViewPredictions';
+import MakePrediction from './pages/MakePrediction';
 
 function App() {
   return (
@@ -26,6 +27,9 @@ function App() {
               <li className="nav-item">
                 <Link to="/predictions" className="nav-link">View Predictions</Link>
               </li>
+              <li className="nav-item">
+                <Link to="/make-prediction" className="nav-link">Make Prediction</Link>
+              </li>
             </ul>
           </div>
         </nav>
@@ -36,6 +40,7 @@ function App() {
             <Route path="/create" element={<ModelCreation />} />
             <Route path="/import" element={<ImportPredictions />} />
             <Route path="/predictions" element={<ViewPredictions />} />
+            <Route path="/make-prediction" element={<MakePrediction />} />
           </Routes>
         </main>
       </div>
