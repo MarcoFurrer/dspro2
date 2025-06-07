@@ -15,10 +15,6 @@ def make_predictions():
 def show_models():
     pass
 
-@app.route('/import_data', methods=['POST'])
-def import_data():
-    pass
-
 @app.route('make_predictions')
 def make_predictions():
     pass
