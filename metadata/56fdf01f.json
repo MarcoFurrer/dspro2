@@ -1,0 +1,20 @@
+{
+  "id": "56fdf01f",
+  "name": "Best Project",
+  "model_type": "ImprovedModel",
+  "optimizer": "SGD",
+  "parameters": {
+    "learning_rate": 0.001,
+    "batch_size": 32,
+    "epochs": 2,
+    "validation_split": 0.1,
+    "feature_set": "medium"
+  },
+  "status": "error",
+  "created_at": "2025-06-11T07:22:53.264899",
+  "started_at": "2025-06-11T07:22:53.268836",
+  "completed_at": "2025-06-11T07:22:55.723373",
+  "metrics": {},
+  "model_path": null,
+  "error": "in user code:\n\n    File \"/Users/marcofurrer/Documents/github/dspro2/.venv/lib/python3.9/site-packages/keras/src/engine/training.py\", line 1401, in train_function  *\n        return step_function(self, iterator)\n    File \"/Users/marcofurrer/Documents/github/dspro2/.venv/lib/python3.9/site-packages/keras/src/engine/training.py\", line 1384, in step_function  **\n        outputs = model.distribute_strategy.run(run_step, args=(data,))\n    File \"/Users/marcofurrer/Documents/github/dspro2/.venv/lib/python3.9/site-packages/keras/src/engine/training.py\", line 1373, in run_step  **\n        outputs = model.train_step(data)\n    File \"/Users/marcofurrer/Documents/github/dspro2/.venv/lib/python3.9/site-packages/keras/src/engine/training.py\", line 1150, in train_step\n        y_pred = self(x, training=True)\n    File \"/Users/marcofurrer/Documents/github/dspro2/.venv/lib/python3.9/site-packages/keras/src/utils/traceback_utils.py\", line 70, in error_handler\n        raise e.with_traceback(filtered_tb) from None\n    File \"/Users/marcofurrer/Documents/github/dspro2/.venv/lib/python3.9/site-packages/keras/src/engine/input_spec.py\", line 298, in assert_input_compatibility\n        raise ValueError(\n\n    ValueError: Input 0 of layer \"model_1\" is incompatible with the layer: expected shape=(None, 42), found shape=(None, 705)\n"
+}

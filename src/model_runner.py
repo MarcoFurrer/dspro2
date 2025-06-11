@@ -1,6 +1,7 @@
 import os
 import json
 import gc
+import time
 import matplotlib.pyplot as plt
 import pyarrow.parquet as pq
 import pandas as pd
@@ -23,6 +24,8 @@ class ModelRunner:
         batch_size: int = 32,
         subset_features: Literal["small", "medium", "all"] = "small",
         model=None,
+        model_id: str = None,
+        model_name: str = None,
     ):
         self.path_train = path_train
         self.path_val = path_val
@@ -34,6 +37,8 @@ class ModelRunner:
         self.subset_features = subset_features
         self.feature_count = None
         self.model = model
+        self.model_id = model_id or f"model_{int(time.time())}"
+        self.model_name = model_name or f"Model_{self.model_id}"
         self.target_set = None
         self._validation = None
 
@@ -136,10 +141,12 @@ class ModelRunner:
         gc.collect()
 
     def export_model(self):
-        """Simple model export"""
-        model_path = os.path.join(self.output_path, "model.keras")
+        """Export model with ID-based naming"""
+        model_filename = f"{self.model_id}.keras"
+        model_path = os.path.join(self.output_path, model_filename)
         self.model.save(model_path)
-        print(f"Model saved to: {model_path}")
+        print(f"Model {self.model_name} (ID: {self.model_id}) saved to: {model_path}")
+        return model_path
 
     def train(self, validation_split=0.1, epochs=5):
         """Train the model using memory-efficient batch processing"""
