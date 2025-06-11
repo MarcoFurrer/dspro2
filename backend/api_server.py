@@ -354,6 +354,146 @@ def get_available_models():
             'message': str(e)
         }), 500
 
+@app.route('/api/models/trained', methods=['GET'])
+def get_trained_models():
+    """Get only successfully trained models"""
+    try:
+        all_models = get_all_models_metadata()
+        trained_models = [model for model in all_models if model['status'] == 'trained']
+        return jsonify({
+            'status': 'success',
+            'models': trained_models
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+@app.route('/api/predict', methods=['POST'])
+def make_prediction():
+    """Make predictions on uploaded dataset and return as parquet download"""
+    try:
+        # Check if file is in request
+        if 'file' not in request.files:
+            return jsonify({
+                'status': 'error',
+                'message': 'No file uploaded'
+            }), 400
+        
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({
+                'status': 'error',
+                'message': 'No file selected'
+            }), 400
+        
+        # Get form data
+        model_id = request.form.get('model_id')
+        prediction_name = request.form.get('prediction_name', 'predictions')
+        
+        if not model_id:
+            return jsonify({
+                'status': 'error',
+                'message': 'Missing required field: model_id'
+            }), 400
+        
+        # Load model metadata
+        metadata_path = os.path.join(METADATA_DIR, f"{model_id}.json")
+        if not os.path.exists(metadata_path):
+            return jsonify({
+                'status': 'error',
+                'message': f'Model {model_id} not found'
+            }), 404
+        
+        with open(metadata_path, 'r') as f:
+            model_metadata = json.load(f)
+        
+        if model_metadata['status'] != 'trained':
+            return jsonify({
+                'status': 'error',
+                'message': f'Model {model_id} is not trained yet'
+            }), 400
+        
+        # Load the trained model
+        model_path = model_metadata['model_path']
+        if not os.path.exists(model_path):
+            return jsonify({
+                'status': 'error',
+                'message': f'Model file not found: {model_path}'
+            }), 404
+        
+        # Load model using TensorFlow
+        import tensorflow as tf
+        model = tf.keras.models.load_model(model_path)
+        
+        # Read uploaded file
+        import pandas as pd
+        import numpy as np
+        
+        if file.filename.endswith('.parquet'):
+            df = pd.read_parquet(file)
+        elif file.filename.endswith('.csv'):
+            df = pd.read_csv(file)
+        else:
+            return jsonify({
+                'status': 'error',
+                'message': 'Unsupported file format. Use .parquet or .csv'
+            }), 400
+        
+        # Load feature metadata
+        features_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'features.json')
+        with open(features_path, 'r') as f:
+            feature_set = json.load(f)
+        
+        # Use the same feature set as the model
+        subset_features = model_metadata['parameters'].get('feature_set', 'small')
+        feature_names = feature_set['feature_sets'][subset_features]
+        
+        # Check if required features exist
+        missing_features = [f for f in feature_names if f not in df.columns]
+        if missing_features:
+            return jsonify({
+                'status': 'error',
+                'message': f'Missing required features: {missing_features[:5]}...'
+            }), 400
+        
+        # Extract features and make predictions
+        X = df[feature_names].values.astype(np.float32)
+        predictions = model.predict(X, batch_size=32, verbose=0)
+        predictions = predictions.squeeze()
+        
+        # Create predictions DataFrame
+        predictions_df = pd.DataFrame({
+            'prediction': predictions
+        })
+        
+        # Add original index if it exists
+        if hasattr(df, 'index'):
+            predictions_df.index = df.index
+        
+        # Save to temporary parquet file
+        import tempfile
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.parquet')
+        predictions_df.to_parquet(temp_file.name)
+        
+        # Generate filename
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        filename = f"{prediction_name}_{model_id}_{timestamp}.parquet"
+        
+        return send_file(
+            temp_file.name,
+            as_attachment=True,
+            download_name=filename,
+            mimetype='application/octet-stream'
+        )
+        
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
 @app.route('/api/health', methods=['GET'])
 def health_check():
     """Health check endpoint"""

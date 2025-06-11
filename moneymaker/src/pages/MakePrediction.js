@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 const MakePrediction = () => {
@@ -11,14 +11,32 @@ const MakePrediction = () => {
   });
   const [isProcessing, setIsProcessing] = useState(false);
   const [dragActive, setDragActive] = useState(false);
+  const [availableModels, setAvailableModels] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  // Available models (in a real app, this would come from an API)
-  const availableModels = [
-    { id: 'advanced_v1', name: 'Advanced Neural Network v1', status: 'trained' },
-    { id: 'lstm_v2', name: 'LSTM Time Series v2', status: 'trained' },
-    { id: 'cnn_v1', name: 'CNN Classifier v1', status: 'trained' },
-    { id: 'ensemble_v1', name: 'Ensemble Model v1', status: 'trained' }
-  ];
+  // Fetch trained models on component mount
+  useEffect(() => {
+    fetchTrainedModels();
+  }, []);
+
+  const fetchTrainedModels = async () => {
+    try {
+      const response = await fetch('http://localhost:5002/api/models/trained');
+      const data = await response.json();
+      
+      if (data.status === 'success') {
+        setAvailableModels(data.models);
+      } else {
+        setError('Failed to load trained models');
+      }
+    } catch (err) {
+      setError('Failed to connect to server');
+      console.error('Error fetching models:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -69,14 +87,40 @@ const MakePrediction = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsProcessing(true);
+    setError(null);
 
-    // Simulate prediction process
-    setTimeout(() => {
-      console.log('Making prediction with:', formData);
+    try {
+      // Create FormData for file upload
+      const formDataToSend = new FormData();
+      formDataToSend.append('file', formData.datasetFile);
+      formDataToSend.append('model_id', formData.modelId);
+      formDataToSend.append('prediction_name', formData.predictionName);
+      formDataToSend.append('confidence_interval', formData.confidenceInterval);
+
+      const response = await fetch('http://localhost:5002/api/predict', {
+        method: 'POST',
+        body: formDataToSend
+      });
+
+      const data = await response.json();
+
+      if (data.status === 'success') {
+        // Navigate to predictions page with success message
+        navigate('/predictions', { 
+          state: { 
+            message: 'Prediction started successfully! Results will appear when processing completes.',
+            predictionId: data.prediction_id
+          }
+        });
+      } else {
+        setError(data.message || 'Failed to start prediction');
+      }
+    } catch (err) {
+      setError('Failed to connect to server');
+      console.error('Error making prediction:', err);
+    } finally {
       setIsProcessing(false);
-      // Navigate to predictions page or show success message
-      navigate('/predictions');
-    }, 3000);
+    }
   };
 
   const formatFileSize = (bytes) => {
@@ -94,43 +138,66 @@ const MakePrediction = () => {
         Select a trained model and dataset to generate new predictions
       </p>
 
-      <form onSubmit={handleSubmit} className="mt-3">
-        <div className="form-group">
-          <label htmlFor="predictionName" className="form-label">
-            Prediction Name *
-          </label>
-          <input
-            type="text"
-            id="predictionName"
-            name="predictionName"
-            value={formData.predictionName}
-            onChange={handleInputChange}
-            className="form-input"
-            placeholder="Enter a name for this prediction batch"
-            required
-          />
+      {error && (
+        <div className="mt-3" style={{
+          padding: '1rem',
+          backgroundColor: '#f8d7da',
+          color: '#721c24',
+          border: '1px solid #f5c6cb',
+          borderRadius: '8px',
+          marginBottom: '1rem'
+        }}>
+          {error}
         </div>
+      )}
 
-        <div className="form-group">
-          <label htmlFor="modelId" className="form-label">
-            Select Model *
-          </label>
-          <select
-            id="modelId"
-            name="modelId"
-            value={formData.modelId}
-            onChange={handleInputChange}
-            className="form-select"
-            required
-          >
-            <option value="">Choose a trained model...</option>
-            {availableModels.map(model => (
-              <option key={model.id} value={model.id}>
-                {model.name} ({model.status})
-              </option>
-            ))}
-          </select>
+      {loading ? (
+        <div className="text-center mt-3">
+          <div className="loading">Loading trained models...</div>
         </div>
+      ) : (
+        <form onSubmit={handleSubmit} className="mt-3">
+          <div className="form-group">
+            <label htmlFor="predictionName" className="form-label">
+              Prediction Name *
+            </label>
+            <input
+              type="text"
+              id="predictionName"
+              name="predictionName"
+              value={formData.predictionName}
+              onChange={handleInputChange}
+              className="form-input"
+              placeholder="Enter a name for this prediction batch"
+              required
+            />
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="modelId" className="form-label">
+              Select Model *
+            </label>
+            <select
+              id="modelId"
+              name="modelId"
+              value={formData.modelId}
+              onChange={handleInputChange}
+              className="form-select"
+              required
+            >
+              <option value="">Choose a trained model...</option>
+              {availableModels.map(model => (
+                <option key={model.id} value={model.id}>
+                  {model.name} (Status: {model.status})
+                </option>
+              ))}
+            </select>
+            {availableModels.length === 0 && (
+              <p style={{ color: '#666', marginTop: '0.5rem', fontSize: '0.9rem' }}>
+                No trained models available. Please train a model first.
+              </p>
+            )}
+          </div>
 
         <div className="form-group">
           <label className="form-label">
@@ -201,7 +268,7 @@ const MakePrediction = () => {
           <button
             type="submit"
             className="btn btn-primary"
-            disabled={isProcessing || !formData.modelId || !formData.datasetFile || !formData.predictionName.trim()}
+            disabled={isProcessing || !formData.modelId || !formData.datasetFile || !formData.predictionName.trim() || availableModels.length === 0}
             style={{ marginRight: '1rem' }}
           >
             {isProcessing ? 'Processing...' : 'Generate Predictions'}
@@ -214,7 +281,8 @@ const MakePrediction = () => {
             Cancel
           </button>
         </div>
-      </form>
+        </form>
+      )}
 
       {isProcessing && (
         <div className="mt-3 text-center">

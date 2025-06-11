@@ -310,3 +310,66 @@ class ModelRunner:
         print(performance_metrics)
         
         return performance_metrics
+
+    @classmethod
+    def load_model_for_prediction(cls, model_path, features_path="data/features.json", subset_features="small"):
+        """Load a trained model for making predictions on new data"""
+        import tensorflow as tf
+        
+        # Load the trained model
+        model = tf.keras.models.load_model(model_path)
+        
+        # Create ModelRunner instance with loaded model
+        runner = cls(
+            path_features=features_path,
+            model=model,
+            subset_features=subset_features
+        )
+        
+        return runner
+    
+    def predict_dataset(self, dataset_path, confidence_interval=0.95):
+        """Make predictions on a dataset file (.parquet or .csv)"""
+        import pandas as pd
+        import numpy as np
+        
+        # Read dataset
+        if dataset_path.endswith('.parquet'):
+            df = pd.read_parquet(dataset_path)
+        elif dataset_path.endswith('.csv'):
+            df = pd.read_csv(dataset_path)
+        else:
+            raise ValueError("Unsupported file format. Use .parquet or .csv")
+        
+        # Get feature names for the specified subset
+        feature_names = self.feature_set["feature_sets"][self.subset_features]
+        
+        # Check if required features exist
+        missing_features = [f for f in feature_names if f not in df.columns]
+        if missing_features:
+            raise ValueError(f"Missing required features: {missing_features[:10]}...")
+        
+        # Extract features and make predictions
+        X = df[feature_names].values.astype(np.float32)
+        predictions = self.predict(X)
+        
+        # Calculate confidence intervals (simple approach using std)
+        pred_std = np.std(predictions)
+        alpha = 1 - confidence_interval
+        z_score = 1.96  # 95% confidence
+        if confidence_interval == 0.90:
+            z_score = 1.645
+        elif confidence_interval == 0.99:
+            z_score = 2.576
+        
+        margin_error = z_score * pred_std / np.sqrt(len(predictions))
+        
+        # Create results dataframe
+        results_df = pd.DataFrame({
+            'prediction': predictions,
+            'confidence_lower': predictions - margin_error,
+            'confidence_upper': predictions + margin_error,
+            'std_deviation': pred_std
+        })
+        
+        return results_df
