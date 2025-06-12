@@ -454,73 +454,145 @@ def make_prediction():
         
         # Load model using TensorFlow
         import tensorflow as tf
-        model = tf.keras.models.load_model(model_path)
-        
-        # Read uploaded file
         import pandas as pd
         import numpy as np
         
-        if file.filename.endswith('.parquet'):
-            df = pd.read_parquet(file)
-        elif file.filename.endswith('.csv'):
-            df = pd.read_csv(file)
-        else:
+        try:
+            print(f"Loading model from: {model_path}")
+            model = tf.keras.models.load_model(model_path, safe_mode=False)
+            print(f"Model loaded successfully. Input shape: {model.input_shape}")
+        except Exception as e:
             return jsonify({
                 'status': 'error',
-                'message': 'Unsupported file format. Use .parquet or .csv'
+                'message': f'Failed to load model: {str(e)}'
+            }), 500
+        
+        # Read uploaded file
+        try:
+            if file.filename.endswith('.parquet'):
+                df = pd.read_parquet(file)
+            elif file.filename.endswith('.csv'):
+                df = pd.read_csv(file)
+            else:
+                return jsonify({
+                    'status': 'error',
+                    'message': 'Unsupported file format. Use .parquet or .csv'
+                }), 400
+            
+            print(f"Dataset loaded: {len(df)} rows, {len(df.columns)} columns")
+            
+        except Exception as e:
+            return jsonify({
+                'status': 'error',
+                'message': f'Failed to read uploaded file: {str(e)}'
             }), 400
         
         # Load feature metadata
-        features_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'features.json')
-        with open(features_path, 'r') as f:
-            feature_set = json.load(f)
+        try:
+            features_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'features.json')
+            with open(features_path, 'r') as f:
+                feature_set = json.load(f)
+        except Exception as e:
+            return jsonify({
+                'status': 'error',
+                'message': f'Failed to load feature metadata: {str(e)}'
+            }), 500
         
         # Use the same feature set as the model
         subset_features = model_metadata['parameters'].get('feature_set', 'small')
+        
+        if subset_features not in feature_set['feature_sets']:
+            return jsonify({
+                'status': 'error',
+                'message': f'Feature set "{subset_features}" not found in feature metadata'
+            }), 500
+            
         feature_names = feature_set['feature_sets'][subset_features]
+        print(f"Using feature set '{subset_features}' with {len(feature_names)} features")
         
         # Check if required features exist
         missing_features = [f for f in feature_names if f not in df.columns]
         if missing_features:
             return jsonify({
                 'status': 'error',
-                'message': f'Missing required features: {missing_features[:5]}...'
+                'message': f'Missing required features: {missing_features[:10]}... (showing first 10 of {len(missing_features)} missing)'
             }), 400
         
         # Extract features and make predictions
-        X = df[feature_names].values.astype(np.float32)
-        predictions = model.predict(X, batch_size=32, verbose=0)
-        predictions = predictions.squeeze()
+        try:
+            X = df[feature_names].values.astype(np.float32)
+            print(f"Feature matrix shape: {X.shape}")
+            
+            # Check for NaN values
+            if np.isnan(X).any():
+                nan_count = np.isnan(X).sum()
+                print(f"Warning: Found {nan_count} NaN values in features, filling with 0")
+                X = np.nan_to_num(X, nan=0.0)
+            
+            predictions = model.predict(X, batch_size=32, verbose=0)
+            predictions = predictions.squeeze()
+            print(f"Predictions shape: {predictions.shape}")
+            
+        except Exception as e:
+            return jsonify({
+                'status': 'error',
+                'message': f'Failed to make predictions: {str(e)}'
+            }), 500
         
         # Create predictions DataFrame
-        predictions_df = pd.DataFrame({
-            'prediction': predictions
-        })
-        
-        # Add original index if it exists
-        if hasattr(df, 'index'):
-            predictions_df.index = df.index
+        try:
+            predictions_df = pd.DataFrame({
+                'prediction': predictions
+            })
+            
+            # Add original index if it exists
+            if hasattr(df, 'index'):
+                predictions_df.index = df.index
+            
+            print(f"Created predictions DataFrame with {len(predictions_df)} rows")
+            
+        except Exception as e:
+            return jsonify({
+                'status': 'error',
+                'message': f'Failed to create predictions DataFrame: {str(e)}'
+            }), 500
         
         # Save to temporary parquet file
-        import tempfile
-        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.parquet')
-        predictions_df.to_parquet(temp_file.name)
-        
-        # Generate filename
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        filename = f"{prediction_name}_{model_id}_{timestamp}.parquet"
-        
-        return send_file(
-            temp_file.name,
-            as_attachment=True,
-            download_name=filename,
-            mimetype='application/octet-stream'
-        )
+        try:
+            import tempfile
+            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.parquet')
+            predictions_df.to_parquet(temp_file.name)
+            
+            # Generate filename
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            filename = f"{prediction_name}_{model_id}_{timestamp}.parquet"
+            
+            print(f"Predictions saved to temporary file: {temp_file.name}")
+            print(f"Download filename: {filename}")
+            
+            return send_file(
+                temp_file.name,
+                as_attachment=True,
+                download_name=filename,
+                mimetype='application/octet-stream'
+            )
+            
+        except Exception as e:
+            return jsonify({
+                'status': 'error',
+                'message': f'Failed to create download file: {str(e)}'
+            }), 500
         
     except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"Prediction error: {str(e)}")
+        print(f"Error details: {error_details}")
+        
         return jsonify({
             'status': 'error',
-            'message': str(e)
+            'message': f'Prediction failed: {str(e)}',
+            'details': error_details if app.debug else None
         }), 500
 
 @app.route('/api/health', methods=['GET'])
