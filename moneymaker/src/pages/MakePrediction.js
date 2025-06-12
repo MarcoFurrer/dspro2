@@ -5,15 +5,14 @@ const MakePrediction = () => {
   const navigate = useNavigate();
   const [formData, setFormData] = useState({
     modelId: '',
-    datasetFile: null,
-    predictionName: '',
-    confidenceInterval: 0.95
+    datasetFile: null
   });
   const [isProcessing, setIsProcessing] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [availableModels, setAvailableModels] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [predictionResults, setPredictionResults] = useState(null);
 
   // Fetch trained models on component mount
   useEffect(() => {
@@ -53,8 +52,10 @@ const MakePrediction = () => {
         ...prev,
         datasetFile: file
       }));
+      setError(null);
+      setPredictionResults(null);
     } else {
-      alert('Please select a valid .parquet or .csv file');
+      setError('Please select a valid .parquet or .csv file');
     }
   };
 
@@ -79,8 +80,10 @@ const MakePrediction = () => {
         ...prev,
         datasetFile: file
       }));
+      setError(null);
+      setPredictionResults(null);
     } else {
-      alert('Please drop a valid .parquet or .csv file');
+      setError('Please drop a valid .parquet or .csv file');
     }
   };
 
@@ -88,38 +91,71 @@ const MakePrediction = () => {
     e.preventDefault();
     setIsProcessing(true);
     setError(null);
+    setPredictionResults(null);
 
     try {
-      // Create FormData for file upload
       const formDataToSend = new FormData();
       formDataToSend.append('file', formData.datasetFile);
       formDataToSend.append('model_id', formData.modelId);
-      formDataToSend.append('prediction_name', formData.predictionName);
-      formDataToSend.append('confidence_interval', formData.confidenceInterval);
+      
+      // Generate prediction name from dataset filename
+      const datasetName = formData.datasetFile.name.replace(/\.[^/.]+$/, ''); // Remove extension
+      formDataToSend.append('prediction_name', datasetName);
 
       const response = await fetch('http://localhost:5002/api/predict', {
         method: 'POST',
-        body: formDataToSend
+        body: formDataToSend,
       });
 
-      const data = await response.json();
+      if (response.ok) {
+        // Get the filename from the response headers
+        const contentDisposition = response.headers.get('Content-Disposition');
+        const filename = contentDisposition 
+          ? contentDisposition.split('filename=')[1].replace(/"/g, '')
+          : 'predictions.parquet';
 
-      if (data.status === 'success') {
-        // Navigate to predictions page with success message
-        navigate('/predictions', { 
-          state: { 
-            message: 'Prediction started successfully! Results will appear when processing completes.',
-            predictionId: data.prediction_id
-          }
-        });
+        // Create blob and download
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+
+        // Show prediction results
+        await showPredictionStats(blob, filename);
+
       } else {
-        setError(data.message || 'Failed to start prediction');
+        const errorData = await response.json();
+        setError(errorData.message || 'Failed to generate predictions');
       }
-    } catch (err) {
-      setError('Failed to connect to server');
-      console.error('Error making prediction:', err);
+    } catch (error) {
+      console.error('Error making prediction:', error);
+      setError('Failed to generate predictions. Please check your connection.');
     } finally {
       setIsProcessing(false);
+    }
+  };
+
+  const showPredictionStats = async (blob, filename) => {
+    try {
+      const selectedModel = availableModels.find(m => m.id === formData.modelId);
+      
+      setPredictionResults({
+        filename: filename,
+        fileSize: formatFileSize(blob.size),
+        downloadTime: new Date().toLocaleString(),
+        model: selectedModel?.name || 'Unknown Model',
+        datasetName: formData.datasetFile.name,
+        datasetSize: formatFileSize(formData.datasetFile.size),
+        success: true
+      });
+    } catch (error) {
+      console.error('Error generating stats:', error);
     }
   };
 
@@ -129,6 +165,15 @@ const MakePrediction = () => {
     const sizes = ['Bytes', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
+
+  const resetForm = () => {
+    setFormData({
+      modelId: '',
+      datasetFile: null
+    });
+    setPredictionResults(null);
+    setError(null);
   };
 
   return (
@@ -157,22 +202,6 @@ const MakePrediction = () => {
         </div>
       ) : (
         <form onSubmit={handleSubmit} className="mt-3">
-          <div className="form-group">
-            <label htmlFor="predictionName" className="form-label">
-              Prediction Name *
-            </label>
-            <input
-              type="text"
-              id="predictionName"
-              name="predictionName"
-              value={formData.predictionName}
-              onChange={handleInputChange}
-              className="form-input"
-              placeholder="Enter a name for this prediction batch"
-              required
-            />
-          </div>
-
           <div className="form-group">
             <label htmlFor="modelId" className="form-label">
               Select Model *
@@ -247,28 +276,11 @@ const MakePrediction = () => {
           </div>
         </div>
 
-        <div className="form-group">
-          <label htmlFor="confidenceInterval" className="form-label">
-            Confidence Interval
-          </label>
-          <select
-            id="confidenceInterval"
-            name="confidenceInterval"
-            value={formData.confidenceInterval}
-            onChange={handleInputChange}
-            className="form-select"
-          >
-            <option value={0.90}>90%</option>
-            <option value={0.95}>95%</option>
-            <option value={0.99}>99%</option>
-          </select>
-        </div>
-
         <div className="text-center">
           <button
             type="submit"
             className="btn btn-primary"
-            disabled={isProcessing || !formData.modelId || !formData.datasetFile || !formData.predictionName.trim() || availableModels.length === 0}
+            disabled={isProcessing || !formData.modelId || !formData.datasetFile || availableModels.length === 0}
             style={{ marginRight: '1rem' }}
           >
             {isProcessing ? 'Processing...' : 'Generate Predictions'}
@@ -276,9 +288,10 @@ const MakePrediction = () => {
           <button
             type="button"
             className="btn btn-secondary"
-            onClick={() => navigate('/predictions')}
+            onClick={resetForm}
+            disabled={isProcessing}
           >
-            Cancel
+            Reset
           </button>
         </div>
         </form>
@@ -288,6 +301,49 @@ const MakePrediction = () => {
         <div className="mt-3 text-center">
           <div className="loading">
             Generating predictions... This may take a few minutes depending on dataset size.
+          </div>
+        </div>
+      )}
+
+      {predictionResults && (
+        <div className="mt-3" style={{
+          padding: '1.5rem',
+          backgroundColor: '#d4edda',
+          color: '#155724',
+          border: '1px solid #c3e6cb',
+          borderRadius: '8px'
+        }}>
+          <h3 style={{ color: '#155724', marginBottom: '1rem', textAlign: 'center' }}>
+            ✅ Prediction Complete!
+          </h3>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+            <div>
+              <p><strong>Download File:</strong> {predictionResults.filename}</p>
+              <p><strong>File Size:</strong> {predictionResults.fileSize}</p>
+              <p><strong>Generated:</strong> {predictionResults.downloadTime}</p>
+            </div>
+            <div>
+              <p><strong>Model Used:</strong> {predictionResults.model}</p>
+              <p><strong>Dataset:</strong> {predictionResults.datasetName}</p>
+              <p><strong>Dataset Size:</strong> {predictionResults.datasetSize}</p>
+            </div>
+          </div>
+          <div className="text-center mt-3">
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={resetForm}
+              style={{ marginRight: '1rem' }}
+            >
+              Make Another Prediction
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => navigate('/')}
+            >
+              Back to Home
+            </button>
           </div>
         </div>
       )}

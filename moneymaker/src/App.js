@@ -4,7 +4,6 @@ import './App.css';
 import Home from './pages/Home';
 import ModelCreation from './pages/ModelCreation';
 import MakePrediction from './pages/MakePrediction';
-import ViewPredictions from './pages/ViewPredictions';
 
 function App() {
   return (
@@ -12,7 +11,7 @@ function App() {
       <div className="App">
         <nav className="navbar">
           <div className="nav-container">
-            <Link to="/" className="nav-brand">ML Model Creator</Link>
+            <Link to="/" className="nav-brand">Money Maker</Link>
             <ul className="nav-menu">
               <li className="nav-item">
                 <Link to="/" className="nav-link">Home</Link>
@@ -23,9 +22,6 @@ function App() {
               <li className="nav-item">
                 <Link to="/make-prediction" className="nav-link">Make Prediction</Link>
               </li>
-              <li className="nav-item">
-                <Link to="/predictions" className="nav-link">View Predictions</Link>
-              </li>
             </ul>
           </div>
         </nav>
@@ -35,7 +31,6 @@ function App() {
             <Route path="/" element={<Home />} />
             <Route path="/create" element={<ModelCreation />} />
             <Route path="/make-prediction" element={<MakePrediction />} />
-            <Route path="/predictions" element={<ViewPredictions />} />
           </Routes>
         </main>
       </div>

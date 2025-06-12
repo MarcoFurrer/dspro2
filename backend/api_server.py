@@ -151,6 +151,7 @@ def get_models():
     """Get all models with metadata"""
     try:
         models = get_all_models_metadata()
+        print(f"Serving {len(models)} models to client")
         return jsonify({
             'status': 'success',
             'models': models
@@ -412,11 +413,39 @@ def make_prediction():
         if model_metadata['status'] != 'trained':
             return jsonify({
                 'status': 'error',
-                'message': f'Model {model_id} is not trained yet'
+                'message': f'Model {model_id} is not trained yet. Status: {model_metadata["status"]}'
             }), 400
         
-        # Load the trained model
-        model_path = model_metadata['model_path']
+        # Check if there was a training error
+        if 'error' in model_metadata and model_metadata['error']:
+            return jsonify({
+                'status': 'error',
+                'message': f'Model {model_id} had training errors: {model_metadata["error"]}'
+            }), 400
+        
+        # Find the model file - check both metadata path and exports directory
+        model_path = model_metadata.get('model_path')
+        
+        if not model_path or not os.path.exists(model_path):
+            # Try to find the model file in the exports directory
+            model_dir = os.path.join(MODELS_DIR, model_id)
+            if os.path.exists(model_dir):
+                # Look for .keras files in the model directory
+                keras_files = [f for f in os.listdir(model_dir) if f.endswith('.keras')]
+                if keras_files:
+                    model_path = os.path.join(model_dir, keras_files[0])
+                    print(f"Found model file: {model_path}")
+                else:
+                    return jsonify({
+                        'status': 'error',
+                        'message': f'No .keras model file found in {model_dir}'
+                    }), 404
+            else:
+                return jsonify({
+                    'status': 'error',
+                    'message': f'Model directory not found: {model_dir}'
+                }), 404
+        
         if not os.path.exists(model_path):
             return jsonify({
                 'status': 'error',

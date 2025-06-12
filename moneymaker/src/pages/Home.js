@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useLocation, Link } from 'react-router-dom';
 import axios from 'axios';
 
@@ -8,6 +8,7 @@ const Home = () => {
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const location = useLocation();
+  const intervalRef = useRef(null);
 
   // Backend API URL
   const API_BASE_URL = 'http://localhost:5002/api';
@@ -25,15 +26,12 @@ const Home = () => {
       }, 5000);
     }
     
-    // Set up auto-refresh for training models
-    const interval = setInterval(() => {
-      if (models.some(model => model.status === 'training')) {
-        loadModels();
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
       }
-    }, 5000);
-    
-    return () => clearInterval(interval);
-  }, [location.state, models]);
+    };
+  }, [location.state]);
 
   const loadModels = async () => {
     try {
@@ -44,6 +42,19 @@ const Home = () => {
       
       if (response.data.status === 'success') {
         setModels(response.data.models);
+        
+        // Clear existing interval
+        if (intervalRef.current) {
+          clearInterval(intervalRef.current);
+        }
+        
+        // Set up auto-refresh only if there are training models
+        const hasTrainingModels = response.data.models.some(model => model.status === 'training');
+        if (hasTrainingModels) {
+          intervalRef.current = setInterval(() => {
+            loadModels();
+          }, 5000);
+        }
       } else {
         setError('Failed to load models');
       }
